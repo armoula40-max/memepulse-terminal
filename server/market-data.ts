@@ -111,7 +111,7 @@ export async function fetchTokensByAddresses(
         /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address),
       ),
     ),
-  ).slice(0, 60);
+  ).slice(0, 500);
   if (!unique.length) return [];
   const observedAt = new Date().toISOString();
   const chunks = Array.from(
