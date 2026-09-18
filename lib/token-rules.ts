@@ -10,6 +10,7 @@ export type AlgorithmSettings = {
   minMarketCapUsd: number;
   minVolume1hUsd: number;
   minBuyRatioPct: number;
+  minMomentumPct: number;
   requireMintDisabled: boolean;
   requireFreezeDisabled: boolean;
 };
@@ -24,39 +25,102 @@ export const DEFAULT_ALGORITHM_SETTINGS: AlgorithmSettings = {
   minMarketCapUsd: 20_000,
   minVolume1hUsd: 5_000,
   minBuyRatioPct: 55,
+  minMomentumPct: 0,
   requireMintDisabled: true,
   requireFreezeDisabled: true,
 };
 
-export type AlgorithmResult = { eligible: boolean; pending: string[]; failures: string[] };
+export const VCS_ALGORITHM_SETTINGS: AlgorithmSettings = {
+  ...DEFAULT_ALGORITHM_SETTINGS,
+  minLiquidityUsd: 10_000,
+  minMarketCapUsd: 20_000,
+  minVolume1hUsd: 5_000,
+  minBuyRatioPct: 55,
+  minMomentumPct: 2,
+};
 
-export function evaluateToken(token: MarketToken, settings: AlgorithmSettings): AlgorithmResult {
+export type AlgorithmResult = {
+  eligible: boolean;
+  pending: string[];
+  failures: string[];
+};
+
+export function evaluateToken(
+  token: MarketToken,
+  settings: AlgorithmSettings,
+): AlgorithmResult {
   const failures: string[] = [];
   const pending: string[] = [];
-  const ageMinutes = token.pairCreatedAt ? Math.max(0, (Date.now() - new Date(token.pairCreatedAt).getTime()) / 60_000) : null;
-  const buyRatio = token.buys1h + token.sells1h > 0 ? token.buys1h / (token.buys1h + token.sells1h) * 100 : null;
-  if (token.liquidityUsd < settings.minLiquidityUsd) failures.push(`Liquidity < $${settings.minLiquidityUsd.toLocaleString()}`);
-  if (token.marketCapUsd < settings.minMarketCapUsd) failures.push(`MC < $${settings.minMarketCapUsd.toLocaleString()}`);
-  if (token.volume1hUsd < settings.minVolume1hUsd) failures.push(`1h volume < $${settings.minVolume1hUsd.toLocaleString()}`);
-  if (buyRatio !== null && buyRatio < settings.minBuyRatioPct) failures.push(`Buy ratio < ${settings.minBuyRatioPct}%`);
+  const ageMinutes = token.pairCreatedAt
+    ? Math.max(
+        0,
+        (Date.now() - new Date(token.pairCreatedAt).getTime()) / 60_000,
+      )
+    : null;
+  const buyRatio =
+    token.buys1h + token.sells1h > 0
+      ? (token.buys1h / (token.buys1h + token.sells1h)) * 100
+      : null;
+  if (token.liquidityUsd < settings.minLiquidityUsd)
+    failures.push(`Liquidity < $${settings.minLiquidityUsd.toLocaleString()}`);
+  if (token.marketCapUsd < settings.minMarketCapUsd)
+    failures.push(`MC < $${settings.minMarketCapUsd.toLocaleString()}`);
+  if (token.volume1hUsd < settings.minVolume1hUsd)
+    failures.push(`1h volume < $${settings.minVolume1hUsd.toLocaleString()}`);
+  if (token.change1hPct < settings.minMomentumPct)
+    failures.push(`Momentum < ${settings.minMomentumPct}%`);
+  if (buyRatio !== null && buyRatio < settings.minBuyRatioPct)
+    failures.push(`Buy ratio < ${settings.minBuyRatioPct}%`);
   if (buyRatio === null) pending.push("Buy ratio");
   if (ageMinutes !== null && ageMinutes <= 10) {
-    if (token.holders === null || token.holders === undefined) pending.push(`Holders ≥ ${settings.minHolders10m} at 10m`);
-    else if (token.holders < settings.minHolders10m) failures.push(`Holders < ${settings.minHolders10m} at 10m`);
-    if (token.top10Pct === null || token.top10Pct === undefined) pending.push(`Top 10 ≤ ${settings.maxTop10PctNew}% at launch`);
-    else if (token.top10Pct > settings.maxTop10PctNew) failures.push(`Top 10 > ${settings.maxTop10PctNew}%`);
+    if (token.holders === null || token.holders === undefined)
+      pending.push(`Holders ≥ ${settings.minHolders10m} at 10m`);
+    else if (token.holders < settings.minHolders10m)
+      failures.push(`Holders < ${settings.minHolders10m} at 10m`);
+    if (token.top10Pct === null || token.top10Pct === undefined)
+      pending.push(`Top 10 ≤ ${settings.maxTop10PctNew}% at launch`);
+    else if (token.top10Pct > settings.maxTop10PctNew)
+      failures.push(`Top 10 > ${settings.maxTop10PctNew}%`);
   } else if (ageMinutes !== null && ageMinutes >= 30) {
-    if (token.holders === null || token.holders === undefined) pending.push(`Holders ≥ ${settings.minHolders30m} at 30m`);
-    else if (token.holders < settings.minHolders30m) failures.push(`Holders < ${settings.minHolders30m} at 30m`);
-    if (token.top10Pct === null || token.top10Pct === undefined) pending.push(`Top 10 ≤ ${settings.maxTop10Pct30m}% at 30m`);
-    else if (token.top10Pct > settings.maxTop10Pct30m) failures.push(`Top 10 > ${settings.maxTop10Pct30m}%`);
+    if (token.holders === null || token.holders === undefined)
+      pending.push(`Holders ≥ ${settings.minHolders30m} at 30m`);
+    else if (token.holders < settings.minHolders30m)
+      failures.push(`Holders < ${settings.minHolders30m} at 30m`);
+    if (token.top10Pct === null || token.top10Pct === undefined)
+      pending.push(`Top 10 ≤ ${settings.maxTop10Pct30m}% at 30m`);
+    else if (token.top10Pct > settings.maxTop10Pct30m)
+      failures.push(`Top 10 > ${settings.maxTop10Pct30m}%`);
   }
-  if (settings.requireMintDisabled && token.mintAuthority !== null && token.mintAuthority !== undefined && token.mintAuthority !== false) failures.push("Mint authority active");
-  else if (settings.requireMintDisabled && (token.mintAuthority === null || token.mintAuthority === undefined)) pending.push("Mint authority");
-  if (settings.requireFreezeDisabled && token.freezeAuthority !== null && token.freezeAuthority !== undefined && token.freezeAuthority !== false) failures.push("Freeze authority active");
-  else if (settings.requireFreezeDisabled && (token.freezeAuthority === null || token.freezeAuthority === undefined)) pending.push("Freeze authority");
+  if (
+    settings.requireMintDisabled &&
+    token.mintAuthority !== null &&
+    token.mintAuthority !== undefined &&
+    token.mintAuthority !== false
+  )
+    failures.push("Mint authority active");
+  else if (
+    settings.requireMintDisabled &&
+    (token.mintAuthority === null || token.mintAuthority === undefined)
+  )
+    pending.push("Mint authority");
+  if (
+    settings.requireFreezeDisabled &&
+    token.freezeAuthority !== null &&
+    token.freezeAuthority !== undefined &&
+    token.freezeAuthority !== false
+  )
+    failures.push("Freeze authority active");
+  else if (
+    settings.requireFreezeDisabled &&
+    (token.freezeAuthority === null || token.freezeAuthority === undefined)
+  )
+    pending.push("Freeze authority");
   const uniquePending = Array.from(new Set(pending));
-  return { eligible: failures.length === 0 && uniquePending.length === 0, pending: uniquePending, failures };
+  return {
+    eligible: failures.length === 0 && uniquePending.length === 0,
+    pending: uniquePending,
+    failures,
+  };
 }
 
 export function algorithmSummary(settings: AlgorithmSettings) {
