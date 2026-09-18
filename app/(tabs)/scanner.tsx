@@ -203,6 +203,39 @@ export default function ScannerScreen() {
         </View>
         <MaterialIcons name="lock" size={15} color={C.muted} />
       </View>
+      {directPump.events.length > 0 ? (
+        <View style={styles.directPanel}>
+          <Text style={styles.directPanelTitle}>
+            PUMPPORTAL DIRECT · {directPump.events.length} NEW TOKENS
+          </Text>
+          {directPump.events.slice(0, 8).map((event) => (
+            <View
+              key={`${event.mint}-${event.createdAt}`}
+              style={styles.directRow}
+            >
+              <View style={styles.directIcon}>
+                <MaterialIcons name="bolt" size={15} color={C.mint} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.directSymbol}>${event.symbol}</Text>
+                <Text style={styles.directName} numberOfLines={1}>
+                  {event.name} · {event.mint.slice(0, 5)}…{event.mint.slice(-5)}
+                </Text>
+              </View>
+              <View style={styles.directNumbers}>
+                <Text style={styles.directNumber}>
+                  {event.marketCapSol !== null
+                    ? `${event.marketCapSol.toFixed(1)} SOL`
+                    : "—"}
+                </Text>
+                <Text style={styles.directAge}>
+                  {safeTime(event.createdAt)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {market.error ? (
         <View style={styles.empty}>
           <MaterialIcons name="cloud-off" size={28} color={C.red} />
@@ -620,6 +653,42 @@ const styles = StyleSheet.create({
   bannerText: { color: C.muted, fontSize: 10, marginTop: 3 },
   liveHint: { color: C.mint, fontSize: 9, marginTop: 4, fontWeight: "800" },
   directError: { color: C.red, fontSize: 9, marginTop: 4 },
+  directPanel: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: "#164D3B",
+    borderRadius: 15,
+    padding: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  directPanelTitle: {
+    color: C.mint,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  directRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 8,
+  },
+  directIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: C.mintSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  directSymbol: { color: C.text, fontSize: 11, fontWeight: "900" },
+  directName: { color: C.muted, fontSize: 9, marginTop: 2 },
+  directNumbers: { alignItems: "flex-end" },
+  directNumber: { color: C.amber, fontSize: 9, fontWeight: "800" },
+  directAge: { color: C.muted, fontSize: 8, marginTop: 2 },
   list: { gap: 11, paddingBottom: 28 },
   card: {
     backgroundColor: C.surface,
