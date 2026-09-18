@@ -180,14 +180,20 @@ export default function ScannerScreen() {
                 : (market.data?.source ?? "Dexscreener public API")}
           </Text>
           <Text style={styles.bannerText}>
+            {directPump.configured
+              ? `Direct ${directPump.events.length} events · `
+              : ""}
             {newFeed.data
-              ? `${newFeed.data.events.length} stream events · ${newFeed.data.tokens.length} pairs · updated ${new Date(newFeed.data.observedAt).toLocaleTimeString()}`
+              ? `${newFeed.data.events.length} server events · ${newFeed.data.tokens.length} pairs · updated ${safeTime(newFeed.data.observedAt)}`
               : market.data
-                ? `Observed ${new Date(market.data.observedAt).toLocaleTimeString()}`
+                ? `Observed ${safeTime(market.data.observedAt)}`
                 : market.error
                   ? "Feed unavailable — retrying safely"
                   : "Loading public market snapshot..."}
           </Text>
+          {directPump.error ? (
+            <Text style={styles.directError}>{directPump.error}</Text>
+          ) : null}
           {newFeed.data?.events?.length ? (
             <Text style={styles.liveHint}>
               ● LIVE CREATION MONITOR · newest event{" "}
@@ -506,6 +512,10 @@ function formatPrice(value: number | null) {
   if (value >= 0.01) return `$${value.toFixed(4)}`;
   return `$${value.toExponential(3)}`;
 }
+function safeTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleTimeString();
+}
 function money(value: number) {
   return value >= 1_000_000
     ? `$${(value / 1_000_000).toFixed(1)}M`
@@ -609,6 +619,7 @@ const styles = StyleSheet.create({
   bannerTitle: { color: C.text, fontSize: 11, fontWeight: "800" },
   bannerText: { color: C.muted, fontSize: 10, marginTop: 3 },
   liveHint: { color: C.mint, fontSize: 9, marginTop: 4, fontWeight: "800" },
+  directError: { color: C.red, fontSize: 9, marginTop: 4 },
   list: { gap: 11, paddingBottom: 28 },
   card: {
     backgroundColor: C.surface,

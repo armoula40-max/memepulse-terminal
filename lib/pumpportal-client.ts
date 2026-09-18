@@ -16,6 +16,7 @@ export function useDirectPumpPortal() {
   const [events, setEvents] = useState<DirectPumpToken[]>([]);
   const [connected, setConnected] = useState(false);
   const [configured, setConfigured] = useState(false);
+  const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -37,18 +38,30 @@ export function useDirectPumpPortal() {
     void loadPumpPortalKey().then((apiKey) => {
       if (cancelled) return;
       setConfigured(Boolean(apiKey));
-      if (!apiKey || typeof WebSocket === "undefined") return;
+      if (!apiKey) {
+        setError("API key is not saved on this phone.");
+        return;
+      }
+      if (typeof WebSocket === "undefined") {
+        setError("WebSocket is not available on this device.");
+        return;
+      }
       socket = new WebSocket(
         `wss://pumpportal.fun/api/data?api-key=${encodeURIComponent(apiKey)}`,
       );
       socket.onopen = () => {
         setConnected(true);
+        setError("");
         socket?.send(JSON.stringify({ method: "subscribeNewToken" }));
       };
       socket.onmessage = (message) => {
         try {
           const item = JSON.parse(String(message.data));
-          if (!item.mint || item.txType !== "create") return;
+          if (item.errors || item.error) {
+            setError(String(item.errors ?? item.error));
+            return;
+          }
+          if (!item.mint || (item.txType && item.txType !== "create")) return;
           setEvents((current) =>
             [
               {
@@ -72,8 +85,14 @@ export function useDirectPumpPortal() {
           // Ignore malformed provider messages.
         }
       };
-      socket.onerror = () => setConnected(false);
-      socket.onclose = () => setConnected(false);
+      socket.onerror = () => {
+        setConnected(false);
+        setError("PumpPortal WebSocket connection failed.");
+      };
+      socket.onclose = () => {
+        setConnected(false);
+        setError("PumpPortal WebSocket closed. Check the key and network.");
+      };
     });
     return () => {
       cancelled = true;
@@ -86,6 +105,7 @@ export function useDirectPumpPortal() {
     events,
     connected,
     configured,
+    error,
     reload: () => setReload((value) => value + 1),
   };
 }
