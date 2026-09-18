@@ -45,7 +45,7 @@ export function evaluateToken(token: MarketToken, settings: AlgorithmSettings): 
     else if (token.holders < settings.minHolders10m) failures.push(`Holders < ${settings.minHolders10m} at 10m`);
     if (token.top10Pct === null || token.top10Pct === undefined) pending.push(`Top 10 ≤ ${settings.maxTop10PctNew}% at launch`);
     else if (token.top10Pct > settings.maxTop10PctNew) failures.push(`Top 10 > ${settings.maxTop10PctNew}%`);
-  } else if (ageMinutes !== null && ageMinutes <= 30) {
+  } else if (ageMinutes !== null && ageMinutes >= 30) {
     if (token.holders === null || token.holders === undefined) pending.push(`Holders ≥ ${settings.minHolders30m} at 30m`);
     else if (token.holders < settings.minHolders30m) failures.push(`Holders < ${settings.minHolders30m} at 30m`);
     if (token.top10Pct === null || token.top10Pct === undefined) pending.push(`Top 10 ≤ ${settings.maxTop10Pct30m}% at 30m`);
