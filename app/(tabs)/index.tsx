@@ -24,6 +24,15 @@ export default function HomeScreen() {
   const [flowFilter, setFlowFilter] = useState<
     "all" | "positive" | "buy-heavy"
   >("all");
+  const [momentumFilter, setMomentumFilter] = useState<
+    "all" | "positive" | "strong"
+  >("all");
+  const [riskFilter, setRiskFilter] = useState<
+    "all" | "guarded" | "watch" | "danger"
+  >("all");
+  const [signalFilter, setSignalFilter] = useState<
+    "all" | "guarded" | "watch" | "danger"
+  >("all");
   const [sortBy, setSortBy] = useState<"score" | "volume">("score");
   const market = trpc.market.latest.useQuery(undefined, {
     staleTime: 25_000,
@@ -52,9 +61,26 @@ export default function HomeScreen() {
             coin.buys1h + coin.sells1h > 0
               ? (coin.buys1h / (coin.buys1h + coin.sells1h)) * 100
               : 0;
+          const risk =
+            coin.liquidityUsd < 25_000
+              ? "danger"
+              : coin.liquidityUsd < 75_000
+                ? "watch"
+                : "guarded";
+          const signal =
+            coin.score >= 70
+              ? "guarded"
+              : coin.score >= 45
+                ? "watch"
+                : "danger";
           return (
             coin.liquidityUsd >= minLiquidity &&
             coin.volume1hUsd >= minVolume &&
+            (momentumFilter === "all" ||
+              (momentumFilter === "positive" && coin.change1hPct > 0) ||
+              (momentumFilter === "strong" && coin.change1hPct >= 10)) &&
+            (riskFilter === "all" || riskFilter === risk) &&
+            (signalFilter === "all" || signalFilter === signal) &&
             (flowFilter === "all" ||
               (flowFilter === "positive" && coin.change1hPct > 0) ||
               (flowFilter === "buy-heavy" && buyPct >= 55))
@@ -66,7 +92,16 @@ export default function HomeScreen() {
             : b.score - a.score,
         )
         .slice(0, 5),
-    [market.data, minLiquidity, minVolume, flowFilter, sortBy],
+    [
+      market.data,
+      minLiquidity,
+      minVolume,
+      flowFilter,
+      momentumFilter,
+      riskFilter,
+      signalFilter,
+      sortBy,
+    ],
   );
   const marketCap = radar.reduce(
     (sum, item) => sum + (item.liquidityUsd || 0),
@@ -312,6 +347,94 @@ export default function HomeScreen() {
                   style={[
                     styles.filterChipText,
                     flowFilter === value && styles.filterChipTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.filterLine}>
+            <Text style={styles.filterLabel}>Momentum</Text>
+            {[
+              ["all", "All"],
+              ["positive", "Positive"],
+              ["strong", "≥10%"],
+            ].map(([value, label]) => (
+              <Pressable
+                key={value}
+                onPress={() =>
+                  setMomentumFilter(value as "all" | "positive" | "strong")
+                }
+                style={[
+                  styles.filterChip,
+                  momentumFilter === value && styles.filterChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    momentumFilter === value && styles.filterChipTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.filterLine}>
+            <Text style={styles.filterLabel}>Risk</Text>
+            {[
+              ["all", "All"],
+              ["guarded", "Guarded"],
+              ["watch", "Watch"],
+              ["danger", "Danger"],
+            ].map(([value, label]) => (
+              <Pressable
+                key={value}
+                onPress={() =>
+                  setRiskFilter(value as "all" | "guarded" | "watch" | "danger")
+                }
+                style={[
+                  styles.filterChip,
+                  riskFilter === value && styles.filterChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    riskFilter === value && styles.filterChipTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.filterLine}>
+            <Text style={styles.filterLabel}>Analysis</Text>
+            {[
+              ["all", "All"],
+              ["guarded", "Positive"],
+              ["watch", "Watch"],
+              ["danger", "Danger"],
+            ].map(([value, label]) => (
+              <Pressable
+                key={value}
+                onPress={() =>
+                  setSignalFilter(
+                    value as "all" | "guarded" | "watch" | "danger",
+                  )
+                }
+                style={[
+                  styles.filterChip,
+                  signalFilter === value && styles.filterChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    signalFilter === value && styles.filterChipTextActive,
                   ]}
                 >
                   {label}
