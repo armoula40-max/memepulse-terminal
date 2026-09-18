@@ -19,6 +19,7 @@ import {
 } from "@/lib/preferences";
 import { evaluateToken } from "@/lib/token-rules";
 import { useDirectPumpPortal } from "@/lib/pumpportal-client";
+import { upsideSignal } from "@/lib/upside-sniper";
 const C = {
   bg: "#07100F",
   surface: "#0D1B18",
@@ -92,6 +93,7 @@ export default function ScannerScreen() {
                   : "MED",
           }),
           algorithm: evaluateToken(coin, prefs.algorithm),
+          upside: upsideSignal(coin),
         }))
         .filter((coin) => {
           const isRisk = coin.liquidityUsd < 25_000;
@@ -104,7 +106,8 @@ export default function ScannerScreen() {
             (!prefs.algorithm.enabled || coin.algorithm.eligible) &&
             (filter === "All" ||
               (filter === "Risk" && isRisk) ||
-              (filter === "New" && isNew)) &&
+              (filter === "New" && isNew) ||
+              (filter === "Sniper" && coin.upside.label !== "watch")) &&
             `${coin.symbol} ${coin.name}`
               .toLowerCase()
               .includes(query.toLowerCase())
@@ -161,7 +164,7 @@ export default function ScannerScreen() {
             {prefs.algorithm.enabled ? "RULES ON" : "RULES OFF"}
           </Text>
         </View>
-        {["All", "New", "Risk"].map((item) => (
+        {["All", "New", "Risk", "Sniper"].map((item) => (
           <Pressable
             key={item}
             onPress={() => setFilter(item)}
@@ -328,6 +331,22 @@ export default function ScannerScreen() {
                       </Text>
                     </View>
                     <Text style={styles.name}>{item.name}</Text>
+                    {item.upside.label !== "watch" ? (
+                      <Text
+                        style={[
+                          styles.upsideBadge,
+                          {
+                            color:
+                              item.upside.label === "x100 speculative"
+                                ? C.amber
+                                : C.mint,
+                          },
+                        ]}
+                      >
+                        {item.upside.label.toUpperCase()} · {item.upside.score}
+                        /100
+                      </Text>
+                    ) : null}
                   </View>
                   <Pressable
                     onPress={() =>
@@ -720,6 +739,12 @@ const styles = StyleSheet.create({
   symbol: { color: C.text, fontSize: 14, fontWeight: "800" },
   risk: { fontSize: 8, fontWeight: "900", letterSpacing: 0.5 },
   name: { color: C.muted, fontSize: 10, marginTop: 3 },
+  upsideBadge: {
+    fontSize: 8,
+    fontWeight: "900",
+    marginTop: 4,
+    letterSpacing: 0.4,
+  },
   star: { padding: 4 },
   scoreLine: {
     flexDirection: "row",
