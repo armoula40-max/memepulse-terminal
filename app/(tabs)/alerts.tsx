@@ -7,6 +7,7 @@ import {
   Switch,
   Text,
   View,
+  Platform,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
@@ -40,6 +41,21 @@ Notifications.setNotificationHandler({
   }),
 });
 
+const SIGNAL_CHANNEL_ID = "memepulse-signals";
+async function configureNotifications() {
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync(SIGNAL_CHANNEL_ID, {
+      name: "MemePulse Signals",
+      importance: Notifications.AndroidImportance.MAX,
+      sound: "memepulse-signal.wav",
+      vibrationPattern: [0, 250, 120, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
+  }
+  const permissions = await Notifications.getPermissionsAsync();
+  if (!permissions.granted) await Notifications.requestPermissionsAsync();
+}
+
 type AlertItem = {
   id: string;
   title: string;
@@ -69,7 +85,7 @@ export default function AlertsScreen() {
   const notifiedEvents = useRef<string>("");
   useEffect(() => {
     void loadPreferences().then(setPrefs);
-    void Notifications.requestPermissionsAsync();
+    void configureNotifications();
   }, []);
 
   const buySignals = useMemo(
@@ -95,18 +111,16 @@ export default function AlertsScreen() {
         icon: "bolt",
       }),
     );
-    (newFeed.data?.events ?? [])
-      .slice(0, 8)
-      .forEach((event) =>
-        items.push({
-          id: `event-${event.mint}`,
-          title: `New token · $${event.symbol}`,
-          detail: `${event.name} · review risk and on-chain safety`,
-          time: new Date(event.createdAt).toLocaleTimeString(),
-          kind: "info",
-          icon: "fiber-new",
-        }),
-      );
+    (newFeed.data?.events ?? []).slice(0, 8).forEach((event) =>
+      items.push({
+        id: `event-${event.mint}`,
+        title: `New token · $${event.symbol}`,
+        detail: `${event.name} · review risk and on-chain safety`,
+        time: new Date(event.createdAt).toLocaleTimeString(),
+        kind: "info",
+        icon: "fiber-new",
+      }),
+    );
     (market.data?.tokens ?? [])
       .filter((token) => token.liquidityUsd < 25_000 || token.change1hPct < -25)
       .slice(0, 5)
@@ -134,9 +148,14 @@ export default function AlertsScreen() {
         content: {
           title: `BUY SIGNAL · $${token.symbol}`,
           body: "All configured rules passed. Open MemePulse to review evidence.",
-          sound: "default",
+          sound: "memepulse-signal.wav",
         },
-        trigger: null,
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+          repeats: false,
+          channelId: SIGNAL_CHANNEL_ID,
+        },
       });
     }
     const event = newFeed.data?.events?.[0];
@@ -149,9 +168,14 @@ export default function AlertsScreen() {
         content: {
           title: `New token · $${event.symbol}`,
           body: "A new creation event is available in the in-app notification center.",
-          sound: "default",
+          sound: "memepulse-signal.wav",
         },
-        trigger: null,
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+          repeats: false,
+          channelId: SIGNAL_CHANNEL_ID,
+        },
       });
     }
     if (event) notifiedEvents.current = event.createdAt;
