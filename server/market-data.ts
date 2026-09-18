@@ -1,30 +1,543 @@
 import { saveMarketSnapshots, getMarketSnapshots } from "./db";
 import { ENV } from "./_core/env";
-export type MarketToken = { address: string; symbol: string; name: string; priceUsd: number | null; liquidityUsd: number; volume24hUsd: number; volume1hUsd: number; change1hPct: number; change24hPct: number; buys1h: number; sells1h: number; pairUrl: string; pairAddress: string; pairCreatedAt: string | null; marketCapUsd: number; dexId: string; source: "dexscreener"; observedAt: string; holders?: number | null; top10Pct?: number | null; mintAuthority?: string | false | null; freezeAuthority?: string | false | null };
-export type HistoricalPoint = { timestamp: number; open: number; high: number; low: number; close: number; volume: number; source: string };
-export type RiskReport = { address: string; score: number | null; level: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"; liquidityUsd: number; buySellRatio: number | null; flags: string[]; source: string; observedAt: string; note: string };
-export type Forecast = { address: string; horizon: "1h"; direction: "UP" | "DOWN" | "NEUTRAL"; probabilityUp: number; probabilityDown: number; confidence: "LOW" | "MEDIUM" | "HIGH"; drivers: string[]; warning: string; observedAt: string };
-const API = "https://api.dexscreener.com"; const RUGCHECK = "https://api.rugcheck.xyz/v1"; let cache: { at: number; data: MarketToken[] } | null = null; const history = new Map<string, MarketToken[]>();
-function num(value: unknown): number { return typeof value === "number" && Number.isFinite(value) ? value : 0; }
-export function normalizePair(pair: any, observedAt = new Date().toISOString()): MarketToken | null { if (!pair || pair.chainId !== "solana" || !pair.baseToken?.address) return null; const txns = pair.txns?.h1 ?? {}; const volume = pair.volume ?? {}; const change = pair.priceChange ?? {}; return { address: String(pair.baseToken.address), symbol: String(pair.baseToken.symbol ?? "UNKNOWN").slice(0, 16), name: String(pair.baseToken.name ?? "Unnamed token").slice(0, 48), priceUsd: pair.priceUsd == null ? null : Number(pair.priceUsd), liquidityUsd: num(pair.liquidity?.usd), volume24hUsd: num(volume.h24), volume1hUsd: num(volume.h1), change1hPct: num(change.h1), change24hPct: num(change.h24), buys1h: num(txns.buys), sells1h: num(txns.sells), pairUrl: String(pair.url ?? ""), pairAddress: String(pair.pairAddress ?? ""), pairCreatedAt: typeof pair.pairCreatedAt === "number" ? new Date(pair.pairCreatedAt).toISOString() : null, marketCapUsd: num(pair.marketCap ?? pair.fdv), dexId: String(pair.dexId ?? "unknown"), source: "dexscreener", observedAt }; }
-function remember(data: MarketToken[]) { for (const item of data) { const points = history.get(item.address) ?? []; points.push(item); history.set(item.address, points.slice(-240)); } }
-export async function fetchTokensByAddresses(addresses: string[]): Promise<MarketToken[]> {
-  const unique = Array.from(new Set(addresses.filter((address) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)))).slice(0, 60);
+export type MarketToken = {
+  address: string;
+  symbol: string;
+  name: string;
+  priceUsd: number | null;
+  liquidityUsd: number;
+  volume24hUsd: number;
+  volume1hUsd: number;
+  change1hPct: number;
+  change24hPct: number;
+  buys1h: number;
+  sells1h: number;
+  pairUrl: string;
+  pairAddress: string;
+  pairCreatedAt: string | null;
+  marketCapUsd: number;
+  dexId: string;
+  source: "dexscreener";
+  observedAt: string;
+  holders?: number | null;
+  top10Pct?: number | null;
+  mintAuthority?: string | false | null;
+  freezeAuthority?: string | false | null;
+};
+export type HistoricalPoint = {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  source: string;
+};
+export type RiskReport = {
+  address: string;
+  score: number | null;
+  level: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+  liquidityUsd: number;
+  buySellRatio: number | null;
+  flags: string[];
+  source: string;
+  observedAt: string;
+  note: string;
+};
+export type Forecast = {
+  address: string;
+  horizon: "1h";
+  direction: "UP" | "DOWN" | "NEUTRAL";
+  probabilityUp: number;
+  probabilityDown: number;
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  drivers: string[];
+  warning: string;
+  observedAt: string;
+};
+const API = "https://api.dexscreener.com";
+const RUGCHECK = "https://api.rugcheck.xyz/v1";
+let cache: { at: number; data: MarketToken[] } | null = null;
+const history = new Map<string, MarketToken[]>();
+function num(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+export function normalizePair(
+  pair: any,
+  observedAt = new Date().toISOString(),
+): MarketToken | null {
+  if (!pair || pair.chainId !== "solana" || !pair.baseToken?.address)
+    return null;
+  const txns = pair.txns?.h1 ?? {};
+  const volume = pair.volume ?? {};
+  const change = pair.priceChange ?? {};
+  return {
+    address: String(pair.baseToken.address),
+    symbol: String(pair.baseToken.symbol ?? "UNKNOWN").slice(0, 16),
+    name: String(pair.baseToken.name ?? "Unnamed token").slice(0, 48),
+    priceUsd: pair.priceUsd == null ? null : Number(pair.priceUsd),
+    liquidityUsd: num(pair.liquidity?.usd),
+    volume24hUsd: num(volume.h24),
+    volume1hUsd: num(volume.h1),
+    change1hPct: num(change.h1),
+    change24hPct: num(change.h24),
+    buys1h: num(txns.buys),
+    sells1h: num(txns.sells),
+    pairUrl: String(pair.url ?? ""),
+    pairAddress: String(pair.pairAddress ?? ""),
+    pairCreatedAt:
+      typeof pair.pairCreatedAt === "number"
+        ? new Date(pair.pairCreatedAt).toISOString()
+        : null,
+    marketCapUsd: num(pair.marketCap ?? pair.fdv),
+    dexId: String(pair.dexId ?? "unknown"),
+    source: "dexscreener",
+    observedAt,
+  };
+}
+function remember(data: MarketToken[]) {
+  for (const item of data) {
+    const points = history.get(item.address) ?? [];
+    points.push(item);
+    history.set(item.address, points.slice(-240));
+  }
+}
+export async function fetchTokensByAddresses(
+  addresses: string[],
+): Promise<MarketToken[]> {
+  const unique = Array.from(
+    new Set(
+      addresses.filter((address) =>
+        /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address),
+      ),
+    ),
+  ).slice(0, 60);
   if (!unique.length) return [];
   const observedAt = new Date().toISOString();
-  const chunks = Array.from({ length: Math.ceil(unique.length / 30) }, (_, index) => unique.slice(index * 30, index * 30 + 30));
-  const responses = await Promise.all(chunks.map((chunk) => fetch(`${API}/tokens/v1/solana/${chunk.join(",")}`, { headers: { Accept: "application/json" } })));
-  const payloads = await Promise.all(responses.filter((response) => response.ok).map((response) => response.json()));
-  return Array.from(new Map(payloads.flat().map((pair: any) => normalizePair(pair, observedAt)).filter((item): item is MarketToken => Boolean(item)).map((item) => [item.address, item])).values());
+  const chunks = Array.from(
+    { length: Math.ceil(unique.length / 30) },
+    (_, index) => unique.slice(index * 30, index * 30 + 30),
+  );
+  const responses = await Promise.all(
+    chunks.map((chunk) =>
+      fetch(`${API}/tokens/v1/solana/${chunk.join(",")}`, {
+        headers: { Accept: "application/json" },
+      }),
+    ),
+  );
+  const payloads = await Promise.all(
+    responses
+      .filter((response) => response.ok)
+      .map((response) => response.json()),
+  );
+  return Array.from(
+    new Map(
+      payloads
+        .flat()
+        .map((pair: any) => normalizePair(pair, observedAt))
+        .filter((item): item is MarketToken => Boolean(item))
+        .map((item) => [item.address, item]),
+    ).values(),
+  );
 }
 
-export async function fetchLatestMarketSnapshot(): Promise<MarketToken[]> { if (cache && Date.now() - cache.at < 30_000) return cache.data; const profilePaths = ["/token-profiles/latest/v1", "/token-profiles/recent-updates/v1", "/token-boosts/latest/v1"]; const profileResponses = await Promise.all(profilePaths.map((path) => fetch(`${API}${path}`, { headers: { Accept: "application/json" } }))); const profileLists = await Promise.all(profileResponses.filter((response) => response.ok).map((response) => response.json())); const addresses = Array.from(new Set(profileLists.flat().filter((item: any) => item.chainId === "solana" && (item.tokenAddress || item.token?.address)).map((item: any) => String(item.tokenAddress || item.token.address)))).slice(0, 300); if (!addresses.length) return []; const chunks = Array.from({ length: Math.ceil(addresses.length / 30) }, (_, index) => addresses.slice(index * 30, index * 30 + 30)); const responses = await Promise.all(chunks.map((chunk) => fetch(`${API}/tokens/v1/solana/${chunk.join(",")}`, { headers: { Accept: "application/json" } }))); if (responses.some((response) => !response.ok)) throw new Error(`tokens_${responses.find((response) => !response.ok)?.status ?? 500}`); const pairs = (await Promise.all(responses.map((response) => response.json()))) as any[][]; const observedAt = new Date().toISOString(); const result = pairs.flat().map((pair) => normalizePair(pair, observedAt)).filter((item): item is MarketToken => Boolean(item)); const deduped = Array.from(new Map(result.map((item) => [item.address, item])).values()).sort((a, b) => b.volume1hUsd - a.volume1hUsd); remember(deduped); void saveMarketSnapshots(deduped.map((item) => ({ tokenAddress: item.address, observedAt: new Date(item.observedAt), priceUsd: item.priceUsd, liquidityUsd: item.liquidityUsd, volume1hUsd: item.volume1hUsd, change1hPct: item.change1hPct, buys1h: item.buys1h, sells1h: item.sells1h }))); cache = { at: Date.now(), data: deduped }; return deduped; }
-export async function getTokenHistory(address: string) { const memory = history.get(address) ?? []; const durable = await getMarketSnapshots(address); return durable.length ? durable.map((row) => ({ address, observedAt: row.observedAt.toISOString(), priceUsd: row.priceUsd, liquidityUsd: row.liquidityUsd, volume1hUsd: row.volume1hUsd, change1hPct: row.change1hPct, buys1h: row.buys1h, sells1h: row.sells1h })) : memory; }
-export async function fetchHistoricalOhlcv(address: string): Promise<HistoricalPoint[]> { const token = cache?.data.find((item) => item.address === address); if (!token?.pairAddress) return []; const headers: Record<string, string> = { Accept: "application/json" }; if (ENV.geckoTerminalApiKey) headers["x-cg-demo-api-key"] = ENV.geckoTerminalApiKey; const url = `${ENV.geckoTerminalApiUrl}/networks/solana/pools/${token.pairAddress}/ohlcv/minute?aggregate=5&limit=1000`; try { const response = await fetch(url, { headers }); if (!response.ok) return []; const json = await response.json() as any; const rows = json?.data?.attributes?.ohlcv_list ?? []; return rows.map((row: any[]) => ({ timestamp: Number(row[0]), open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), source: "geckoterminal" })).filter((row: HistoricalPoint) => Number.isFinite(row.close)); } catch { return []; } }
-export function buildHeuristicRisk(token: MarketToken): RiskReport { const flags: string[] = []; const ratio = token.sells1h ? token.buys1h / token.sells1h : token.buys1h > 0 ? 99 : null; if (token.liquidityUsd < 10_000) flags.push("very_thin_liquidity"); else if (token.liquidityUsd < 50_000) flags.push("thin_liquidity"); if (ratio !== null && ratio > 8) flags.push("buy_sell_imbalance"); if (token.change1hPct < -25) flags.push("sharp_decline"); if (token.change1hPct > 100) flags.push("extreme_volatility"); const score = Math.max(0, Math.min(100, Math.round(70 - flags.length * 18 + Math.min(token.liquidityUsd / 10_000, 20)))); return { address: token.address, score, level: score >= 70 ? "LOW" : score >= 45 ? "MEDIUM" : "HIGH", liquidityUsd: token.liquidityUsd, buySellRatio: ratio === null ? null : Number(ratio.toFixed(2)), flags, source: "local_heuristics", observedAt: new Date().toISOString(), note: "Heuristic only; verify mint/freeze authorities and holder concentration independently." }; }
-export async function fetchRiskReport(address: string): Promise<RiskReport> { const token = cache?.data.find((item) => item.address === address); const fallback = token ? buildHeuristicRisk(token) : { address, score: null, level: "UNKNOWN" as const, liquidityUsd: 0, buySellRatio: null, flags: ["no_current_snapshot"], source: "local_heuristics", observedAt: new Date().toISOString(), note: "No current market snapshot available." }; try { const response = await fetch(`${RUGCHECK}/tokens/${encodeURIComponent(address)}/report/summary`, { headers: { Accept: "application/json" } }); if (!response.ok) return fallback; const report = await response.json() as any; const score = typeof report.score === "number" ? report.score : fallback.score; const providerFlags = Array.isArray(report.risks) ? report.risks.slice(0, 8).map((risk: any) => String(risk.name ?? risk.description ?? "risk")) : []; const flags = Array.from(new Set([...fallback.flags, ...providerFlags])); const level = fallback.liquidityUsd < 10_000 || fallback.flags.includes("sharp_decline") ? "HIGH" : fallback.liquidityUsd < 50_000 || flags.length > 2 ? "MEDIUM" : "LOW"; return { ...fallback, score, level, flags, source: "rugcheck_plus_local", note: "RugCheck summary plus local market heuristics; a provider score cannot override thin liquidity or market-structure warnings." }; } catch { return fallback; } }
-export type TokenSafety = { address: string; mintAuthority: string | null; freezeAuthority: string | null; topHolderPercent: number | null; topHolders: Array<{ address: string; amount: string; percent: number | null }>; source: string; note: string; observedAt: string };
-export async function fetchTokenSafety(address: string): Promise<TokenSafety> { const rpc = "https://api.mainnet-beta.solana.com"; const call = async (method: string, params: unknown[]) => { const response = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }) }); return await response.json() as any; }; try { const account = await call("getAccountInfo", [address, { encoding: "base64" }]); const raw = account?.result?.value?.data?.[0]; const bytes = raw ? Buffer.from(raw, "base64") : Buffer.alloc(0); const readAuthority = (offset: number) => { if (bytes.length < offset + 36 || bytes.readUInt32LE(offset) === 0) return null; return bytes.subarray(offset + 4, offset + 36).toString("base64"); }; const supply = await call("getTokenSupply", [address]); const total = Number(supply?.result?.value?.amount ?? 0); const largest = await call("getTokenLargestAccounts", [address]); const values = (largest?.result?.value ?? []).slice(0, 10) as Array<{ address: string; amount: string }>; return { address, mintAuthority: readAuthority(0), freezeAuthority: readAuthority(46), topHolderPercent: total > 0 && values[0] ? Number((Number(values[0].amount) / total * 100).toFixed(2)) : null, topHolders: values.map((holder) => ({ ...holder, percent: total > 0 ? Number((Number(holder.amount) / total * 100).toFixed(2)) : null })), source: "solana_public_rpc", note: "Authorities and top accounts are public chain facts; this is not a complete honeypot or insider-risk guarantee.", observedAt: new Date().toISOString() }; } catch { return { address, mintAuthority: null, freezeAuthority: null, topHolderPercent: null, topHolders: [], source: "solana_public_rpc_unavailable", note: "RPC safety inspection unavailable; do not treat missing data as safe.", observedAt: new Date().toISOString() }; } }
-export type VideoStrategySignal = { address: string; score: number; eligible: boolean; reasons: string[]; currentMarketCapUsd: number; estimatedAthMarketCapUsd: number; pullbackPct: number | null; supportTests: number; riskStopPct: number; targetRule: string; warning: string };
-export function videoStrategySignal(token: MarketToken, points: Array<{ priceUsd: number | null; marketCapUsd?: number; observedAt: string }>): VideoStrategySignal { const prices = points.map((point) => point.priceUsd).filter((value): value is number => typeof value === "number" && value > 0); const athPrice = prices.length ? Math.max(...prices) : token.priceUsd ?? 0; const pullbackPct = athPrice > 0 && token.priceUsd !== null ? Number(((1 - token.priceUsd / athPrice) * 100).toFixed(1)) : null; const athMarketCap = Math.max(token.marketCapUsd, ...points.map((point) => point.marketCapUsd ?? 0)); const ageHours = token.pairCreatedAt ? (Date.now() - new Date(token.pairCreatedAt).getTime()) / 3_600_000 : null; const supportPrice = prices.length ? Math.min(...prices.slice(-20)) : null; const supportTests = supportPrice && token.priceUsd ? prices.slice(-20).filter((price) => Math.abs(price - supportPrice) / supportPrice <= 0.03).length : 0; const reasons: string[] = []; let score = 0; if (ageHours !== null && ageHours >= 1) { score += 15; reasons.push("age above 1h"); } if (token.marketCapUsd >= 30_000) { score += 20; reasons.push("market cap above $30k"); } if (athMarketCap >= 300_000) { score += 20; reasons.push("estimated ATH market cap above $300k"); } if (pullbackPct !== null && pullbackPct >= 70) { score += 25; reasons.push("deep pullback from observed high"); } if (supportTests >= 3) { score += 20; reasons.push("repeated support tests"); } if (token.liquidityUsd < 20_000) reasons.push("thin liquidity penalty"); const eligible = score >= 60 && token.liquidityUsd >= 20_000 && supportTests >= 2; return { address: token.address, score: Math.max(0, Math.min(100, score - (token.liquidityUsd < 20_000 ? 20 : 0))), eligible, reasons, currentMarketCapUsd: token.marketCapUsd, estimatedAthMarketCapUsd: athMarketCap, pullbackPct, supportTests, riskStopPct: 10, targetRule: "below observed ATH / prior high", warning: "Video rules are converted into a research filter. They are not proof of a second pump and do not execute orders." }; }
-export function forecastToken(token: MarketToken): Forecast { const ratio = token.sells1h ? token.buys1h / token.sells1h : 1; const volumeAcceleration = token.volume24hUsd > 0 ? token.volume1hUsd / (token.volume24hUsd / 24) : 0; const raw = token.change1hPct * 0.45 + token.change24hPct * 0.2 + Math.max(-20, Math.min(20, (ratio - 1) * 8)) + Math.max(-15, Math.min(15, (volumeAcceleration - 1) * 5)); const probabilityUp = Math.round(Math.max(5, Math.min(95, 50 + raw * 0.7))); const probabilityDown = 100 - probabilityUp; const direction = probabilityUp >= 56 ? "UP" : probabilityUp <= 44 ? "DOWN" : "NEUTRAL"; const confidence = Math.abs(probabilityUp - 50) >= 25 ? "HIGH" : Math.abs(probabilityUp - 50) >= 12 ? "MEDIUM" : "LOW"; const drivers = [token.change1hPct >= 0 ? "positive 1H momentum" : "negative 1H momentum", ratio >= 1 ? "buy flow at or above sell flow" : "sell flow above buy flow", volumeAcceleration >= 1 ? "volume above 24H hourly baseline" : "volume below baseline"]; return { address: token.address, horizon: "1h", direction, probabilityUp, probabilityDown, confidence, drivers, warning: "Probabilistic research signal only; not a price guarantee or financial advice.", observedAt: new Date().toISOString() }; }
+export async function fetchLatestMarketSnapshot(): Promise<MarketToken[]> {
+  if (cache && Date.now() - cache.at < 30_000) return cache.data;
+  const profilePaths = [
+    "/token-profiles/latest/v1",
+    "/token-profiles/recent-updates/v1",
+    "/token-boosts/latest/v1",
+  ];
+  const profileResponses = await Promise.all(
+    profilePaths.map((path) =>
+      fetch(`${API}${path}`, { headers: { Accept: "application/json" } }),
+    ),
+  );
+  const profileLists = await Promise.all(
+    profileResponses
+      .filter((response) => response.ok)
+      .map((response) => response.json()),
+  );
+  const addresses = Array.from(
+    new Set(
+      profileLists
+        .flat()
+        .filter(
+          (item: any) =>
+            item.chainId === "solana" &&
+            (item.tokenAddress || item.token?.address),
+        )
+        .map((item: any) => String(item.tokenAddress || item.token.address)),
+    ),
+  ).slice(0, 150);
+  if (!addresses.length) return [];
+  const chunks = Array.from(
+    { length: Math.ceil(addresses.length / 30) },
+    (_, index) => addresses.slice(index * 30, index * 30 + 30),
+  );
+  const responses = await Promise.all(
+    chunks.map((chunk) =>
+      fetch(`${API}/tokens/v1/solana/${chunk.join(",")}`, {
+        headers: { Accept: "application/json" },
+      }),
+    ),
+  );
+  if (responses.some((response) => !response.ok))
+    throw new Error(
+      `tokens_${responses.find((response) => !response.ok)?.status ?? 500}`,
+    );
+  const pairs = (await Promise.all(
+    responses.map((response) => response.json()),
+  )) as any[][];
+  const observedAt = new Date().toISOString();
+  const result = pairs
+    .flat()
+    .map((pair) => normalizePair(pair, observedAt))
+    .filter((item): item is MarketToken => Boolean(item));
+  const deduped = Array.from(
+    new Map(result.map((item) => [item.address, item])).values(),
+  ).sort((a, b) => b.volume1hUsd - a.volume1hUsd);
+  remember(deduped);
+  void saveMarketSnapshots(
+    deduped.map((item) => ({
+      tokenAddress: item.address,
+      observedAt: new Date(item.observedAt),
+      priceUsd: item.priceUsd,
+      liquidityUsd: item.liquidityUsd,
+      volume1hUsd: item.volume1hUsd,
+      change1hPct: item.change1hPct,
+      buys1h: item.buys1h,
+      sells1h: item.sells1h,
+    })),
+  );
+  cache = { at: Date.now(), data: deduped };
+  return deduped;
+}
+export async function getTokenHistory(address: string) {
+  const memory = history.get(address) ?? [];
+  const durable = await getMarketSnapshots(address);
+  return durable.length
+    ? durable.map((row) => ({
+        address,
+        observedAt: row.observedAt.toISOString(),
+        priceUsd: row.priceUsd,
+        liquidityUsd: row.liquidityUsd,
+        volume1hUsd: row.volume1hUsd,
+        change1hPct: row.change1hPct,
+        buys1h: row.buys1h,
+        sells1h: row.sells1h,
+      }))
+    : memory;
+}
+export async function fetchHistoricalOhlcv(
+  address: string,
+): Promise<HistoricalPoint[]> {
+  const token = cache?.data.find((item) => item.address === address);
+  if (!token?.pairAddress) return [];
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (ENV.geckoTerminalApiKey)
+    headers["x-cg-demo-api-key"] = ENV.geckoTerminalApiKey;
+  const url = `${ENV.geckoTerminalApiUrl}/networks/solana/pools/${token.pairAddress}/ohlcv/minute?aggregate=5&limit=1000`;
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) return [];
+    const json = (await response.json()) as any;
+    const rows = json?.data?.attributes?.ohlcv_list ?? [];
+    return rows
+      .map((row: any[]) => ({
+        timestamp: Number(row[0]),
+        open: Number(row[1]),
+        high: Number(row[2]),
+        low: Number(row[3]),
+        close: Number(row[4]),
+        volume: Number(row[5]),
+        source: "geckoterminal",
+      }))
+      .filter((row: HistoricalPoint) => Number.isFinite(row.close));
+  } catch {
+    return [];
+  }
+}
+export function buildHeuristicRisk(token: MarketToken): RiskReport {
+  const flags: string[] = [];
+  const ratio = token.sells1h
+    ? token.buys1h / token.sells1h
+    : token.buys1h > 0
+      ? 99
+      : null;
+  if (token.liquidityUsd < 10_000) flags.push("very_thin_liquidity");
+  else if (token.liquidityUsd < 50_000) flags.push("thin_liquidity");
+  if (ratio !== null && ratio > 8) flags.push("buy_sell_imbalance");
+  if (token.change1hPct < -25) flags.push("sharp_decline");
+  if (token.change1hPct > 100) flags.push("extreme_volatility");
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        70 - flags.length * 18 + Math.min(token.liquidityUsd / 10_000, 20),
+      ),
+    ),
+  );
+  return {
+    address: token.address,
+    score,
+    level: score >= 70 ? "LOW" : score >= 45 ? "MEDIUM" : "HIGH",
+    liquidityUsd: token.liquidityUsd,
+    buySellRatio: ratio === null ? null : Number(ratio.toFixed(2)),
+    flags,
+    source: "local_heuristics",
+    observedAt: new Date().toISOString(),
+    note: "Heuristic only; verify mint/freeze authorities and holder concentration independently.",
+  };
+}
+export async function fetchRiskReport(address: string): Promise<RiskReport> {
+  const token = cache?.data.find((item) => item.address === address);
+  const fallback = token
+    ? buildHeuristicRisk(token)
+    : {
+        address,
+        score: null,
+        level: "UNKNOWN" as const,
+        liquidityUsd: 0,
+        buySellRatio: null,
+        flags: ["no_current_snapshot"],
+        source: "local_heuristics",
+        observedAt: new Date().toISOString(),
+        note: "No current market snapshot available.",
+      };
+  try {
+    const response = await fetch(
+      `${RUGCHECK}/tokens/${encodeURIComponent(address)}/report/summary`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!response.ok) return fallback;
+    const report = (await response.json()) as any;
+    const score =
+      typeof report.score === "number" ? report.score : fallback.score;
+    const providerFlags = Array.isArray(report.risks)
+      ? report.risks
+          .slice(0, 8)
+          .map((risk: any) => String(risk.name ?? risk.description ?? "risk"))
+      : [];
+    const flags = Array.from(new Set([...fallback.flags, ...providerFlags]));
+    const level =
+      fallback.liquidityUsd < 10_000 || fallback.flags.includes("sharp_decline")
+        ? "HIGH"
+        : fallback.liquidityUsd < 50_000 || flags.length > 2
+          ? "MEDIUM"
+          : "LOW";
+    return {
+      ...fallback,
+      score,
+      level,
+      flags,
+      source: "rugcheck_plus_local",
+      note: "RugCheck summary plus local market heuristics; a provider score cannot override thin liquidity or market-structure warnings.",
+    };
+  } catch {
+    return fallback;
+  }
+}
+export type TokenSafety = {
+  address: string;
+  mintAuthority: string | null;
+  freezeAuthority: string | null;
+  topHolderPercent: number | null;
+  topHolders: Array<{
+    address: string;
+    amount: string;
+    percent: number | null;
+  }>;
+  source: string;
+  note: string;
+  observedAt: string;
+};
+export async function fetchTokenSafety(address: string): Promise<TokenSafety> {
+  const rpc = "https://api.mainnet-beta.solana.com";
+  const call = async (method: string, params: unknown[]) => {
+    const response = await fetch(rpc, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
+    });
+    return (await response.json()) as any;
+  };
+  try {
+    const account = await call("getAccountInfo", [
+      address,
+      { encoding: "base64" },
+    ]);
+    const raw = account?.result?.value?.data?.[0];
+    const bytes = raw ? Buffer.from(raw, "base64") : Buffer.alloc(0);
+    const readAuthority = (offset: number) => {
+      if (bytes.length < offset + 36 || bytes.readUInt32LE(offset) === 0)
+        return null;
+      return bytes.subarray(offset + 4, offset + 36).toString("base64");
+    };
+    const supply = await call("getTokenSupply", [address]);
+    const total = Number(supply?.result?.value?.amount ?? 0);
+    const largest = await call("getTokenLargestAccounts", [address]);
+    const values = (largest?.result?.value ?? []).slice(0, 10) as Array<{
+      address: string;
+      amount: string;
+    }>;
+    return {
+      address,
+      mintAuthority: readAuthority(0),
+      freezeAuthority: readAuthority(46),
+      topHolderPercent:
+        total > 0 && values[0]
+          ? Number(((Number(values[0].amount) / total) * 100).toFixed(2))
+          : null,
+      topHolders: values.map((holder) => ({
+        ...holder,
+        percent:
+          total > 0
+            ? Number(((Number(holder.amount) / total) * 100).toFixed(2))
+            : null,
+      })),
+      source: "solana_public_rpc",
+      note: "Authorities and top accounts are public chain facts; this is not a complete honeypot or insider-risk guarantee.",
+      observedAt: new Date().toISOString(),
+    };
+  } catch {
+    return {
+      address,
+      mintAuthority: null,
+      freezeAuthority: null,
+      topHolderPercent: null,
+      topHolders: [],
+      source: "solana_public_rpc_unavailable",
+      note: "RPC safety inspection unavailable; do not treat missing data as safe.",
+      observedAt: new Date().toISOString(),
+    };
+  }
+}
+export type VideoStrategySignal = {
+  address: string;
+  score: number;
+  eligible: boolean;
+  reasons: string[];
+  currentMarketCapUsd: number;
+  estimatedAthMarketCapUsd: number;
+  pullbackPct: number | null;
+  supportTests: number;
+  riskStopPct: number;
+  targetRule: string;
+  warning: string;
+};
+export function videoStrategySignal(
+  token: MarketToken,
+  points: Array<{
+    priceUsd: number | null;
+    marketCapUsd?: number;
+    observedAt: string;
+  }>,
+): VideoStrategySignal {
+  const prices = points
+    .map((point) => point.priceUsd)
+    .filter((value): value is number => typeof value === "number" && value > 0);
+  const athPrice = prices.length ? Math.max(...prices) : (token.priceUsd ?? 0);
+  const pullbackPct =
+    athPrice > 0 && token.priceUsd !== null
+      ? Number(((1 - token.priceUsd / athPrice) * 100).toFixed(1))
+      : null;
+  const athMarketCap = Math.max(
+    token.marketCapUsd,
+    ...points.map((point) => point.marketCapUsd ?? 0),
+  );
+  const ageHours = token.pairCreatedAt
+    ? (Date.now() - new Date(token.pairCreatedAt).getTime()) / 3_600_000
+    : null;
+  const supportPrice = prices.length ? Math.min(...prices.slice(-20)) : null;
+  const supportTests =
+    supportPrice && token.priceUsd
+      ? prices
+          .slice(-20)
+          .filter(
+            (price) => Math.abs(price - supportPrice) / supportPrice <= 0.03,
+          ).length
+      : 0;
+  const reasons: string[] = [];
+  let score = 0;
+  if (ageHours !== null && ageHours >= 1) {
+    score += 15;
+    reasons.push("age above 1h");
+  }
+  if (token.marketCapUsd >= 30_000) {
+    score += 20;
+    reasons.push("market cap above $30k");
+  }
+  if (athMarketCap >= 300_000) {
+    score += 20;
+    reasons.push("estimated ATH market cap above $300k");
+  }
+  if (pullbackPct !== null && pullbackPct >= 70) {
+    score += 25;
+    reasons.push("deep pullback from observed high");
+  }
+  if (supportTests >= 3) {
+    score += 20;
+    reasons.push("repeated support tests");
+  }
+  if (token.liquidityUsd < 20_000) reasons.push("thin liquidity penalty");
+  const eligible =
+    score >= 60 && token.liquidityUsd >= 20_000 && supportTests >= 2;
+  return {
+    address: token.address,
+    score: Math.max(
+      0,
+      Math.min(100, score - (token.liquidityUsd < 20_000 ? 20 : 0)),
+    ),
+    eligible,
+    reasons,
+    currentMarketCapUsd: token.marketCapUsd,
+    estimatedAthMarketCapUsd: athMarketCap,
+    pullbackPct,
+    supportTests,
+    riskStopPct: 10,
+    targetRule: "below observed ATH / prior high",
+    warning:
+      "Video rules are converted into a research filter. They are not proof of a second pump and do not execute orders.",
+  };
+}
+export function forecastToken(token: MarketToken): Forecast {
+  const ratio = token.sells1h ? token.buys1h / token.sells1h : 1;
+  const volumeAcceleration =
+    token.volume24hUsd > 0 ? token.volume1hUsd / (token.volume24hUsd / 24) : 0;
+  const raw =
+    token.change1hPct * 0.45 +
+    token.change24hPct * 0.2 +
+    Math.max(-20, Math.min(20, (ratio - 1) * 8)) +
+    Math.max(-15, Math.min(15, (volumeAcceleration - 1) * 5));
+  const probabilityUp = Math.round(Math.max(5, Math.min(95, 50 + raw * 0.7)));
+  const probabilityDown = 100 - probabilityUp;
+  const direction =
+    probabilityUp >= 56 ? "UP" : probabilityUp <= 44 ? "DOWN" : "NEUTRAL";
+  const confidence =
+    Math.abs(probabilityUp - 50) >= 25
+      ? "HIGH"
+      : Math.abs(probabilityUp - 50) >= 12
+        ? "MEDIUM"
+        : "LOW";
+  const drivers = [
+    token.change1hPct >= 0 ? "positive 1H momentum" : "negative 1H momentum",
+    ratio >= 1 ? "buy flow at or above sell flow" : "sell flow above buy flow",
+    volumeAcceleration >= 1
+      ? "volume above 24H hourly baseline"
+      : "volume below baseline",
+  ];
+  return {
+    address: token.address,
+    horizon: "1h",
+    direction,
+    probabilityUp,
+    probabilityDown,
+    confidence,
+    drivers,
+    warning:
+      "Probabilistic research signal only; not a price guarantee or financial advice.",
+    observedAt: new Date().toISOString(),
+  };
+}
