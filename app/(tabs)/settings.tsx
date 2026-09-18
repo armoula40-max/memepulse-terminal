@@ -21,6 +21,7 @@ import {
   type AlgorithmSettings,
   VCS_ALGORITHM_SETTINGS,
 } from "@/lib/token-rules";
+import { loadPumpPortalKey, savePumpPortalKey } from "@/lib/pumpportal-key";
 const C = {
   bg: "#07100F",
   surface: "#0D1B18",
@@ -60,8 +61,11 @@ export default function SettingsScreen() {
   const [paper, setPaper] = useState(true);
   const [biometric, setBiometric] = useState(false);
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFERENCES);
+  const [pumpPortalKey, setPumpPortalKey] = useState("");
+  const [pumpPortalSaved, setPumpPortalSaved] = useState(false);
   useEffect(() => {
     loadPreferences().then(setPrefs);
+    loadPumpPortalKey().then((value) => setPumpPortalKey(value));
   }, []);
   const update = (next: Preferences) => {
     setPrefs(next);
@@ -91,6 +95,55 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <MaterialIcons name="check-circle" size={18} color={C.mint} />
+        </View>
+        <Text style={styles.section}>DIRECT PUMPPORTAL CONNECTION</Text>
+        <View style={styles.walletCard}>
+          <View style={styles.walletHeader}>
+            <MaterialIcons name="sync" size={20} color={C.mint} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingTitle}>PumpPortal API key</Text>
+              <Text style={styles.settingDescription}>
+                Stored only on this phone. The Scanner connects directly without
+                the local server.
+              </Text>
+            </View>
+          </View>
+          <TextInput
+            value={pumpPortalKey}
+            onChangeText={(value) => {
+              setPumpPortalKey(value);
+              setPumpPortalSaved(false);
+            }}
+            placeholder="Paste PumpPortal API key"
+            placeholderTextColor={C.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            style={styles.walletInput}
+          />
+          <View style={styles.walletActions}>
+            <Pressable
+              onPress={() => {
+                void savePumpPortalKey(pumpPortalKey).then(() =>
+                  setPumpPortalSaved(true),
+                );
+              }}
+              style={styles.walletButton}
+            >
+              <Text style={styles.walletButtonText}>SAVE ON THIS PHONE</Text>
+            </Pressable>
+            <Text style={styles.walletStatus}>
+              {pumpPortalSaved
+                ? "KEY SAVED LOCALLY"
+                : pumpPortalKey
+                  ? "UNSAVED KEY"
+                  : "NOT CONFIGURED"}
+            </Text>
+          </View>
+          <Text style={styles.keyWarning}>
+            This key is not sent to MemePulse servers. PumpPortal can still
+            identify usage from a direct app connection.
+          </Text>
         </View>
         <Text style={styles.section}>NEW-TOKEN ALGORITHM</Text>
         <View style={styles.algorithmCard}>
@@ -519,6 +572,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "right",
   },
+  keyWarning: { color: C.amber, fontSize: 9, lineHeight: 14 },
   kicker: {
     color: C.mint,
     fontSize: 10,
