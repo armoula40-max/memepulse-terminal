@@ -71,7 +71,13 @@ export default function ScannerScreen() {
   );
   const data = useMemo(
     () =>
-      (market.data?.tokens ?? [])
+      Array.from(
+        new Map(
+          [...(market.data?.tokens ?? []), ...directPump.tokens].map(
+            (token) => [token.address, token],
+          ),
+        ).values(),
+      )
         .map((coin) => ({
           ...coin,
           score: opportunityScore({
@@ -105,9 +111,12 @@ export default function ScannerScreen() {
           );
         })
         .sort((a, b) => b.score - a.score),
-    [market.data, filter, query, prefs.algorithm],
+    [market.data, directPump.tokens, filter, query, prefs.algorithm],
   );
   const selected = data.find((item) => item.address === selectedAddress);
+  const directEligibleEvents = directPump.events.filter((event) =>
+    data.some((token) => token.address === event.mint),
+  );
   return (
     <ScreenContainer className="px-5" containerClassName="bg-background">
       <View style={styles.header}>
@@ -181,7 +190,7 @@ export default function ScannerScreen() {
           </Text>
           <Text style={styles.bannerText}>
             {directPump.configured
-              ? `Direct ${directPump.events.length} events · `
+              ? `Direct ${directEligibleEvents.length} eligible · ${directPump.events.length} received · `
               : ""}
             {newFeed.data
               ? `${newFeed.data.events.length} server events · ${newFeed.data.tokens.length} pairs · updated ${safeTime(newFeed.data.observedAt)}`
@@ -203,12 +212,12 @@ export default function ScannerScreen() {
         </View>
         <MaterialIcons name="lock" size={15} color={C.muted} />
       </View>
-      {directPump.events.length > 0 ? (
+      {directEligibleEvents.length > 0 ? (
         <View style={styles.directPanel}>
           <Text style={styles.directPanelTitle}>
-            PUMPPORTAL DIRECT · {directPump.events.length} NEW TOKENS
+            PUMPPORTAL DIRECT · {directEligibleEvents.length} ELIGIBLE TOKENS
           </Text>
-          {directPump.events.slice(0, 8).map((event) => (
+          {directEligibleEvents.slice(0, 8).map((event) => (
             <View
               key={`${event.mint}-${event.createdAt}`}
               style={styles.directRow}

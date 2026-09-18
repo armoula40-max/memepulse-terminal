@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { MarketToken } from "@/server/market-data";
 import { loadPumpPortalKey } from "@/lib/pumpportal-key";
 
 export type DirectPumpToken = {
@@ -12,8 +13,63 @@ export type DirectPumpToken = {
   createdAt: string;
 };
 
+const DEX = "https://api.dexscreener.com/latest/dex/tokens/";
+function number(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+async function hydrateEvents(events: DirectPumpToken[]) {
+  const results = await Promise.all(
+    events.slice(0, 40).map(async (event): Promise<MarketToken | null> => {
+      try {
+        const response = await fetch(`${DEX}${encodeURIComponent(event.mint)}`);
+        if (!response.ok) return null;
+        const payload = await response.json();
+        const pair = (payload.pairs ?? []).find(
+          (item: any) => item.chainId === "solana",
+        );
+        if (!pair) return null;
+        const txns = pair.txns?.h1 ?? {};
+        const volume = pair.volume ?? {};
+        const change = pair.priceChange ?? {};
+        return {
+          address: event.mint,
+          symbol: String(pair.baseToken?.symbol ?? event.symbol).slice(0, 16),
+          name: String(pair.baseToken?.name ?? event.name).slice(0, 48),
+          priceUsd: pair.priceUsd == null ? null : Number(pair.priceUsd),
+          liquidityUsd: number(pair.liquidity?.usd),
+          volume24hUsd: number(volume.h24),
+          volume1hUsd: number(volume.h1),
+          change1hPct: number(change.h1),
+          change24hPct: number(change.h24),
+          buys1h: number(txns.buys),
+          sells1h: number(txns.sells),
+          pairUrl: String(
+            pair.url ?? `https://dexscreener.com/solana/${event.mint}`,
+          ),
+          pairAddress: String(pair.pairAddress ?? event.mint),
+          pairCreatedAt: pair.pairCreatedAt
+            ? new Date(pair.pairCreatedAt).toISOString()
+            : event.createdAt,
+          marketCapUsd: number(pair.marketCap ?? pair.fdv),
+          dexId: String(pair.dexId ?? "pumpfun"),
+          source: "dexscreener",
+          observedAt: new Date().toISOString(),
+          holders: null,
+          top10Pct: null,
+          mintAuthority: null,
+          freezeAuthority: null,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return results.filter((item): item is MarketToken => item !== null);
+}
+
 export function useDirectPumpPortal() {
   const [events, setEvents] = useState<DirectPumpToken[]>([]);
+  const [tokens, setTokens] = useState<MarketToken[]>([]);
   const [connected, setConnected] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [error, setError] = useState("");
@@ -101,8 +157,20 @@ export function useDirectPumpPortal() {
     };
   }, [reload]);
 
+  useEffect(() => {
+    if (!events.length) return;
+    let cancelled = false;
+    void hydrateEvents(events).then((items) => {
+      if (!cancelled) setTokens(items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [events]);
+
   return {
     events,
+    tokens,
     connected,
     configured,
     error,

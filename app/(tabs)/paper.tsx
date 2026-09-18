@@ -12,6 +12,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import { simulateFill } from "@/lib/simulation";
+import { useDirectPumpPortal } from "@/lib/pumpportal-client";
 
 const C = {
   bg: "#07100F",
@@ -61,7 +62,18 @@ export default function PaperScreen() {
     staleTime: 5_000,
     refetchInterval: 15_000,
   });
-  const tokens = market.data?.tokens ?? [];
+  const directPump = useDirectPumpPortal();
+  const tokens = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          [...(market.data?.tokens ?? []), ...directPump.tokens].map(
+            (token) => [token.address, token],
+          ),
+        ).values(),
+      ),
+    [market.data, directPump.tokens],
+  );
   const selected =
     tokens.find((token) => token.address === selectedAddress) ?? tokens[0];
   useEffect(() => {
