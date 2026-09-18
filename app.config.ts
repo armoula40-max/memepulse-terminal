@@ -88,7 +88,7 @@ const config: ExpoConfig = {
     "expo-router",
     [
       "expo-notifications",
-      { sounds: ["./assets/sounds/memepulse-signal.wav"] },
+      { sounds: ["./assets/sounds/memepulse_signal.wav"] },
     ],
     [
       "expo-audio",

@@ -47,7 +47,7 @@ async function configureNotifications() {
     await Notifications.setNotificationChannelAsync(SIGNAL_CHANNEL_ID, {
       name: "MemePulse Signals",
       importance: Notifications.AndroidImportance.MAX,
-      sound: "memepulse-signal.wav",
+      sound: "memepulse_signal.wav",
       vibrationPattern: [0, 250, 120, 250],
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
@@ -148,7 +148,7 @@ export default function AlertsScreen() {
         content: {
           title: `BUY SIGNAL · $${token.symbol}`,
           body: "All configured rules passed. Open MemePulse to review evidence.",
-          sound: "memepulse-signal.wav",
+          sound: "memepulse_signal.wav",
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -168,7 +168,7 @@ export default function AlertsScreen() {
         content: {
           title: `New token · $${event.symbol}`,
           body: "A new creation event is available in the in-app notification center.",
-          sound: "memepulse-signal.wav",
+          sound: "memepulse_signal.wav",
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
