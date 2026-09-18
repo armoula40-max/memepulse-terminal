@@ -118,17 +118,21 @@ export async function fetchTokensByAddresses(
     { length: Math.ceil(unique.length / 30) },
     (_, index) => unique.slice(index * 30, index * 30 + 30),
   );
-  const responses = await Promise.all(
+  const responses = await Promise.allSettled(
     chunks.map((chunk) =>
       fetch(`${API}/tokens/v1/solana/${chunk.join(",")}`, {
         headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8_000),
       }),
     ),
   );
   const payloads = await Promise.all(
     responses
-      .filter((response) => response.ok)
-      .map((response) => response.json()),
+      .filter(
+        (result): result is PromiseFulfilledResult<Response> =>
+          result.status === "fulfilled" && result.value.ok,
+      )
+      .map((result) => result.value.json()),
   );
   return Array.from(
     new Map(
