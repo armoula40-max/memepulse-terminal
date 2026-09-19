@@ -170,7 +170,7 @@ public class PumpPortalBootReceiver extends BroadcastReceiver {
   @Override public void onReceive(Context c, Intent i) { if (Intent.ACTION_BOOT_COMPLETED.equals(i.getAction())) { /* service restarts when the app next supplies the locally stored key */ } }
 }
 `;
-function writeFile(config, { modRequest }) {
+function writeFile({ modRequest, modResults }) {
   const root = modRequest.platformProjectRoot;
   const dir = path.join(root, JAVA_DIR);
   fs.mkdirSync(dir, { recursive: true });
@@ -225,10 +225,10 @@ function writeFile(config, { modRequest }) {
       fs.writeFileSync(main, text);
     }
   }
-  return config;
+  return modResults;
 }
 module.exports = function withPumpPortalService(config) {
   return withPlugins(config, [
-    [withDangerousMod, { platform: "android", mod: writeFile }],
+    [withDangerousMod, ["android", writeFile]],
   ]);
 };
