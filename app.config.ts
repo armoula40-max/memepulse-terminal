@@ -86,6 +86,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "./scripts/with-pumpportal-service.js",
     [
       "expo-notifications",
       { sounds: ["./assets/sounds/memepulse_signal.wav"] },

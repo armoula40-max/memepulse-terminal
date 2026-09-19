@@ -24,6 +24,10 @@ import {
   VCS_ALGORITHM_SETTINGS,
 } from "@/lib/token-rules";
 import { loadPumpPortalKey, savePumpPortalKey } from "@/lib/pumpportal-key";
+import {
+  startPumpPortalBackground,
+  stopPumpPortalBackground,
+} from "@/lib/pumpportal-background";
 const C = {
   bg: "#07100F",
   surface: "#0D1B18",
@@ -129,9 +133,12 @@ export default function SettingsScreen() {
           <View style={styles.walletActions}>
             <Pressable
               onPress={() => {
-                void savePumpPortalKey(pumpPortalKey).then(() =>
-                  setPumpPortalSaved(true),
-                );
+                void savePumpPortalKey(pumpPortalKey).then(() => {
+                  if (pumpPortalKey.trim())
+                    startPumpPortalBackground(pumpPortalKey);
+                  else stopPumpPortalBackground();
+                  setPumpPortalSaved(true);
+                });
               }}
               style={styles.walletButton}
             >
