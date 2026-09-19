@@ -44,14 +44,14 @@ export const appRouter = router({
   market: router({
     latest: publicProcedure.query(async () => {
       const dexTokens = fetchLatestMarketSnapshot();
-      const streamTokens = fetchTokensByAddresses(getNewTokenMints(500));
+      const streamTokens = fetchTokensByAddresses(getNewTokenMints(150), 150);
       const [dex, stream] = await Promise.all([dexTokens, streamTokens]);
       const combined = Array.from(
         new Map(
           [...stream, ...dex].map((token) => [token.address, token]),
         ).values(),
       );
-      latestTokens = combined.slice(0, 500);
+      latestTokens = combined.slice(0, 150);
       return {
         source: stream.length
           ? "PumpPortal live stream + Dexscreener enrichment"
@@ -88,7 +88,10 @@ export const appRouter = router({
       }),
     newTokens: publicProcedure.query(async () => {
       const events = getNewTokenEvents();
-      const streamTokens = await fetchTokensByAddresses(getNewTokenMints(500));
+      const streamTokens = await fetchTokensByAddresses(
+        getNewTokenMints(150),
+        150,
+      );
       const tokens = latestTokens.length
         ? latestTokens
         : await fetchLatestMarketSnapshot();
@@ -114,7 +117,7 @@ export const appRouter = router({
               new Date(b.pairCreatedAt ?? 0).getTime() -
               new Date(a.pairCreatedAt ?? 0).getTime(),
           )
-          .slice(0, 500),
+          .slice(0, 150),
       };
     }),
     risk: publicProcedure

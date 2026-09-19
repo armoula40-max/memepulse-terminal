@@ -16,6 +16,7 @@ const P = {
   red: "#FF7B80",
   blue: "#8BB8FF",
 };
+const MAX_RADAR_AGE_MS = 60 * 60 * 1000;
 export default function HomeScreen() {
   const [watching, setWatching] = useState<string[]>([]);
   const [scanRunning, setScanRunning] = useState(true);
@@ -57,6 +58,13 @@ export default function HomeScreen() {
           }),
         }))
         .filter((coin) => {
+          const pairAgeMs = coin.pairCreatedAt
+            ? Date.now() - new Date(coin.pairCreatedAt).getTime()
+            : null;
+          const isFreshPair =
+            pairAgeMs !== null &&
+            pairAgeMs >= 0 &&
+            pairAgeMs <= MAX_RADAR_AGE_MS;
           const buyPct =
             coin.buys1h + coin.sells1h > 0
               ? (coin.buys1h / (coin.buys1h + coin.sells1h)) * 100
@@ -74,6 +82,7 @@ export default function HomeScreen() {
                 ? "watch"
                 : "danger";
           return (
+            isFreshPair &&
             coin.liquidityUsd >= minLiquidity &&
             coin.volume1hUsd >= minVolume &&
             (momentumFilter === "all" ||

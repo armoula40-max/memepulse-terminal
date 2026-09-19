@@ -104,6 +104,7 @@ function remember(data: MarketToken[]) {
 }
 export async function fetchTokensByAddresses(
   addresses: string[],
+  limit = 150,
 ): Promise<MarketToken[]> {
   const unique = Array.from(
     new Set(
@@ -111,21 +112,25 @@ export async function fetchTokensByAddresses(
         /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address),
       ),
     ),
-  ).slice(0, 500);
+  ).slice(0, limit);
   if (!unique.length) return [];
   const observedAt = new Date().toISOString();
   const chunks = Array.from(
     { length: Math.ceil(unique.length / 30) },
     (_, index) => unique.slice(index * 30, index * 30 + 30),
   );
-  const responses = await Promise.allSettled(
-    chunks.map((chunk) =>
-      fetch(`${API}/tokens/v1/solana/${chunk.join(",")}`, {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(8_000),
-      }),
-    ),
-  );
+  const responses: PromiseSettledResult<Response>[] = [];
+  for (let index = 0; index < chunks.length; index += 4) {
+    const batch = await Promise.allSettled(
+      chunks.slice(index, index + 4).map((chunk) =>
+        fetch(`${API}/tokens/v1/solana/${chunk.join(",")}`, {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(8_000),
+        }),
+      ),
+    );
+    responses.push(...batch);
+  }
   const payloads = await Promise.all(
     responses
       .filter(
