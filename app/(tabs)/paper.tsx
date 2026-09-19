@@ -94,6 +94,15 @@ export default function PaperScreen() {
           const position = positions.find(
             (item) => item.address === order.address,
           );
+          if (order.side === "SELL") {
+            if (position) {
+              position.qty = Math.max(0, position.qty - order.qty);
+              position.realizedPnlUsd +=
+                (order.fillPriceUsd - position.avgEntryUsd) * order.qty -
+                order.feeUsd;
+            }
+            continue;
+          }
           if (position) {
             position.qty += order.qty;
             position.investedUsd += order.notionalUsd;
@@ -112,9 +121,13 @@ export default function PaperScreen() {
         return {
           ...current,
           cashUsd:
-            current.cashUsd -
+            current.cashUsd +
             incoming.reduce(
-              (sum, order) => sum + order.notionalUsd + order.feeUsd,
+              (sum, order) =>
+                sum +
+                (order.side === "SELL"
+                  ? order.notionalUsd - order.feeUsd
+                  : -(order.notionalUsd + order.feeUsd)),
               0,
             ),
           positions,

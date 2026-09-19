@@ -72,6 +72,8 @@ export default function SettingsScreen() {
   const [pumpPortalSaved, setPumpPortalSaved] = useState(false);
   const [paperAutoBuy, setPaperAutoBuy] = useState(false);
   const [paperAutoBuyAmount, setPaperAutoBuyAmount] = useState("100");
+  const [takeProfitPct, setTakeProfitPct] = useState("100");
+  const [stopLossPct, setStopLossPct] = useState("25");
   useEffect(() => {
     loadPreferences().then(setPrefs);
     loadPumpPortalKey().then((value) => setPumpPortalKey(value));
@@ -376,6 +378,8 @@ export default function SettingsScreen() {
                   value,
                   Number(paperAutoBuyAmount) || 100,
                   prefs.filterMode,
+                  Number(takeProfitPct) || 100,
+                  Number(stopLossPct) || 25,
                 );
               }}
               trackColor={{ false: "#1A3029", true: "#2C7459" }}
@@ -393,12 +397,51 @@ export default function SettingsScreen() {
                     true,
                     Number(value) || 100,
                     prefs.filterMode,
+                    Number(takeProfitPct) || 100,
+                    Number(stopLossPct) || 25,
                   );
               }}
               keyboardType="decimal-pad"
               style={styles.autoBuyInput}
             />
             <Text style={styles.ruleSuffix}>USD</Text>
+          </View>
+          <View style={styles.autoBuyRow}>
+            <Text style={styles.ruleLabel}>TAKE PROFIT / STOP LOSS</Text>
+            <TextInput
+              value={takeProfitPct}
+              onChangeText={(value) => {
+                setTakeProfitPct(value);
+                if (paperAutoBuy)
+                  configurePaperAutoBuy(
+                    true,
+                    Number(paperAutoBuyAmount) || 100,
+                    prefs.filterMode,
+                    Number(value) || 100,
+                    Number(stopLossPct) || 25,
+                  );
+              }}
+              keyboardType="decimal-pad"
+              style={styles.autoBuyInput}
+            />
+            <Text style={styles.ruleSuffix}>% /</Text>
+            <TextInput
+              value={stopLossPct}
+              onChangeText={(value) => {
+                setStopLossPct(value);
+                if (paperAutoBuy)
+                  configurePaperAutoBuy(
+                    true,
+                    Number(paperAutoBuyAmount) || 100,
+                    prefs.filterMode,
+                    Number(takeProfitPct) || 100,
+                    Number(value) || 25,
+                  );
+              }}
+              keyboardType="decimal-pad"
+              style={styles.autoBuyInput}
+            />
+            <Text style={styles.ruleSuffix}>%</Text>
           </View>
           <Text style={styles.keyWarning}>
             No real transaction or wallet signing. Maximum per order is $1,000.

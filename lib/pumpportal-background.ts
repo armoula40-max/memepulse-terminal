@@ -8,6 +8,8 @@ const service = NativeModules.PumpPortalService as
         enabled: boolean,
         amount: number,
         mode: string,
+        tp: number,
+        sl: number,
       ) => void;
       getAutoBuyOrders: () => Promise<string>;
     }
@@ -26,9 +28,11 @@ export function configurePaperAutoBuy(
   enabled: boolean,
   amount: number,
   mode: string,
+  tp = 100,
+  sl = 25,
 ) {
   if (Platform.OS === "android" && service?.configureAutoBuy)
-    service.configureAutoBuy(enabled, amount, mode);
+    service.configureAutoBuy(enabled, amount, mode, tp, sl);
 }
 
 export async function loadPaperAutoBuyOrders(): Promise<unknown[]> {

@@ -27,6 +27,10 @@ public class PumpPortalForegroundService extends Service {
   boolean autoBuy = false;
   double autoBuyUsd = 100.0;
   String autoBuyMode = "strict";
+  double takeProfitPct = 100.0;
+  double stopLossPct = 25.0;
+  Handler priceHandler = new Handler(Looper.getMainLooper());
+  boolean stopped = false;
 
   @Override public void onCreate() {
     super.onCreate();
@@ -36,12 +40,16 @@ public class PumpPortalForegroundService extends Service {
     autoBuy = paper.getBoolean("enabled", false);
     autoBuyUsd = Double.longBitsToDouble(paper.getLong("amount", Double.doubleToLongBits(100.0)));
     autoBuyMode = paper.getString("mode", "strict");
+    takeProfitPct = Double.longBitsToDouble(paper.getLong("tp", Double.doubleToLongBits(100.0)));
+    stopLossPct = Double.longBitsToDouble(paper.getLong("sl", Double.doubleToLongBits(25.0)));
   }
   @Override public int onStartCommand(Intent intent, int flags, int startId) {
+    stopped = false;
     if (intent != null && ACTION_STOP.equals(intent.getAction())) { stopSelf(); return START_NOT_STICKY; }
     if (intent != null && intent.hasExtra("apiKey")) apiKey = intent.getStringExtra("apiKey");
     startForeground(NOTIFICATION_ID, persistent("MemePulse is monitoring PumpPortal"));
     if (apiKey != null && !apiKey.isEmpty() && socket == null) connect();
+    schedulePriceChecks();
     return START_STICKY;
   }
   void connect() {
@@ -123,9 +131,14 @@ public class PumpPortalForegroundService extends Service {
     } catch (Exception ignored) {}
   }
   void notifyAutoBuy(String symbol) { NotificationManager manager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE); Notification n = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("PAPER AUTO-BUY · $" + symbol).setContentText("Simulated order · $" + String.format(java.util.Locale.US, "%.2f", autoBuyUsd) + " · " + autoBuyMode).setAutoCancel(true).setPriority(Notification.PRIORITY_HIGH).build(); manager.notify((int)(System.currentTimeMillis() % 1000000), n); }
+  void schedulePriceChecks() { priceHandler.postDelayed(() -> { checkPaperPositions(); if (!stopped) schedulePriceChecks(); }, 15000); }
+  void checkPaperPositions() { try { org.json.JSONArray orders = new org.json.JSONArray(getSharedPreferences("paper_auto_buy", MODE_PRIVATE).getString("orders", "[]")); java.util.HashSet<String> open = new java.util.HashSet<>(); for (int i = 0; i < orders.length(); i++) { JSONObject order = orders.getJSONObject(i); if ("BUY".equals(order.optString("side")) && !order.optBoolean("closed", false)) open.add(order.optString("address")); } for (String address : open) checkOnePosition(address); } catch (Exception ignored) {} }
+  void checkOnePosition(String address) { Request request = new Request.Builder().url("https://api.dexscreener.com/latest/dex/tokens/" + address).build(); client.newCall(request).enqueue(new Callback() { public void onFailure(Call call, java.io.IOException e) {} public void onResponse(Call call, Response response) throws java.io.IOException { if (!response.isSuccessful() || response.body() == null) return; try { org.json.JSONArray pairs = new JSONObject(response.body().string()).optJSONArray("pairs"); if (pairs != null && pairs.length() > 0) { double price = pairs.getJSONObject(0).optDouble("priceUsd", 0); if (price > 0) evaluateExit(address, price); } } catch (Exception ignored) {} } }); }
+  void evaluateExit(String address, double price) { android.content.SharedPreferences p = getSharedPreferences("paper_auto_buy", MODE_PRIVATE); try { org.json.JSONArray orders = new org.json.JSONArray(p.getString("orders", "[]")); for (int i = 0; i < orders.length(); i++) { JSONObject buy = orders.getJSONObject(i); if (!address.equals(buy.optString("address")) || buy.optBoolean("closed", false)) continue; double entry = buy.optDouble("fillPriceUsd", 0); if (entry <= 0) continue; double change = (price / entry - 1) * 100; String reason = change >= takeProfitPct ? "TAKE_PROFIT" : change <= -stopLossPct ? "STOP_LOSS" : ""; if (reason.isEmpty()) continue; buy.put("closed", true); JSONObject sell = new JSONObject(); sell.put("id", "auto-exit-" + System.currentTimeMillis()); sell.put("address", address); sell.put("symbol", buy.optString("symbol")); sell.put("side", "SELL"); sell.put("notionalUsd", buy.optDouble("qty") * price); sell.put("fillPriceUsd", price); sell.put("qty", buy.optDouble("qty")); sell.put("feeUsd", buy.optDouble("qty") * price * 0.003); sell.put("createdAt", new java.util.Date().toString()); sell.put("status", "FILLED"); sell.put("reason", reason); sell.put("pnlPct", change); orders.put(sell); p.edit().putString("orders", orders.toString()).apply(); notifyExit(buy.optString("symbol"), reason, change); return; } } catch (Exception ignored) {} }
+  void notifyExit(String symbol, String reason, double change) { NotificationManager manager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE); Notification n = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("PAPER " + reason + " · $" + symbol).setContentText(String.format(java.util.Locale.US, "Exit %.2f%% · simulated SELL", change)).setAutoCancel(true).setPriority(Notification.PRIORITY_HIGH).build(); manager.notify((int)(System.currentTimeMillis() % 1000000), n); }
   Notification persistent(String text) { return new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("MemePulse background monitor").setContentText(text).setOngoing(true).setCategory(Notification.CATEGORY_SERVICE).build(); }
   void createChannel() { if (Build.VERSION.SDK_INT >= 26) { NotificationChannel c = new NotificationChannel(CHANNEL, "PumpPortal monitoring", NotificationManager.IMPORTANCE_HIGH); c.setDescription("Instant new-token notifications"); ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c); } }
-  @Override public void onDestroy() { if (socket != null) socket.close(1000, "service stopped"); if (client != null) client.dispatcher().executorService().shutdown(); super.onDestroy(); }
+  @Override public void onDestroy() { stopped = true; priceHandler.removeCallbacksAndMessages(null); if (socket != null) socket.close(1000, "service stopped"); if (client != null) client.dispatcher().executorService().shutdown(); super.onDestroy(); }
   @Nullable @Override public android.os.IBinder onBind(Intent intent) { return null; }
 }
 `;
@@ -138,7 +151,7 @@ public class PumpPortalServiceModule extends ReactContextBaseJavaModule {
   @Override public String getName() { return "PumpPortalService"; }
   @ReactMethod public void start(String apiKey) { Intent i = new Intent(getReactApplicationContext(), PumpPortalForegroundService.class); i.setAction(PumpPortalForegroundService.ACTION_START); i.putExtra("apiKey", apiKey); if (android.os.Build.VERSION.SDK_INT >= 26) getReactApplicationContext().startForegroundService(i); else getReactApplicationContext().startService(i); }
   @ReactMethod public void stop() { getReactApplicationContext().stopService(new Intent(getReactApplicationContext(), PumpPortalForegroundService.class)); }
-  @ReactMethod public void configureAutoBuy(boolean enabled, double amount, String mode) { getReactApplicationContext().getSharedPreferences("paper_auto_buy", 0).edit().putBoolean("enabled", enabled).putLong("amount", Double.doubleToLongBits(Math.max(1.0, Math.min(amount, 1000.0)))).putString("mode", mode == null ? "strict" : mode).apply(); }
+  @ReactMethod public void configureAutoBuy(boolean enabled, double amount, String mode, double tp, double sl) { getReactApplicationContext().getSharedPreferences("paper_auto_buy", 0).edit().putBoolean("enabled", enabled).putLong("amount", Double.doubleToLongBits(Math.max(1.0, Math.min(amount, 1000.0)))).putString("mode", mode == null ? "strict" : mode).putLong("tp", Double.doubleToLongBits(Math.max(1.0, Math.min(tp, 10000.0)))).putLong("sl", Double.doubleToLongBits(Math.max(1.0, Math.min(sl, 99.0)))).apply(); }
   @ReactMethod public void getAutoBuyOrders(Promise promise) { promise.resolve(getReactApplicationContext().getSharedPreferences("paper_auto_buy", 0).getString("orders", "[]")); }
 }
 `;
