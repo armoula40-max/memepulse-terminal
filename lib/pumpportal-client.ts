@@ -64,7 +64,37 @@ async function hydrateEvents(events: DirectPumpToken[]) {
       }
     }),
   );
-  return results.filter((item): item is MarketToken => item !== null);
+  const hydrated = results.filter((item): item is MarketToken => item !== null);
+  const hydratedAddresses = new Set(hydrated.map((item) => item.address));
+  const pending = events
+    .filter((event) => !hydratedAddresses.has(event.mint))
+    .map(
+      (event): MarketToken => ({
+        address: event.mint,
+        symbol: event.symbol,
+        name: event.name,
+        priceUsd: null,
+        liquidityUsd: 0,
+        volume24hUsd: 0,
+        volume1hUsd: 0,
+        change1hPct: 0,
+        change24hPct: 0,
+        buys1h: 0,
+        sells1h: 0,
+        pairUrl: `https://dexscreener.com/solana/${event.mint}`,
+        pairAddress: event.mint,
+        pairCreatedAt: event.createdAt,
+        marketCapUsd: 0,
+        dexId: "pumpportal-pending",
+        source: "dexscreener",
+        observedAt: new Date().toISOString(),
+        holders: null,
+        top10Pct: null,
+        mintAuthority: null,
+        freezeAuthority: null,
+      }),
+    );
+  return [...hydrated, ...pending];
 }
 
 export function useDirectPumpPortal() {
@@ -160,11 +190,16 @@ export function useDirectPumpPortal() {
   useEffect(() => {
     if (!events.length) return;
     let cancelled = false;
-    void hydrateEvents(events).then((items) => {
-      if (!cancelled) setTokens(items);
-    });
+    const refresh = () => {
+      void hydrateEvents(events).then((items) => {
+        if (!cancelled) setTokens(items);
+      });
+    };
+    refresh();
+    const timer = setInterval(refresh, 15_000);
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, [events]);
 
