@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  BALANCED_ALGORITHM_SETTINGS,
   DEFAULT_ALGORITHM_SETTINGS,
+  EARLY_SNIPER_ALGORITHM_SETTINGS,
   evaluateToken,
+  settingsForMode,
   VCS_ALGORITHM_SETTINGS,
 } from "../lib/token-rules";
 
@@ -50,5 +53,17 @@ describe("new-token algorithm", () => {
       VCS_ALGORITHM_SETTINGS,
     );
     expect(result.failures).toContain("Momentum < 2%");
+  });
+
+  it("provides strict, early, and balanced threshold profiles", () => {
+    expect(settingsForMode("strict")).toEqual(DEFAULT_ALGORITHM_SETTINGS);
+    expect(settingsForMode("early")).toEqual(EARLY_SNIPER_ALGORITHM_SETTINGS);
+    expect(settingsForMode("balanced")).toEqual(BALANCED_ALGORITHM_SETTINGS);
+    expect(EARLY_SNIPER_ALGORITHM_SETTINGS.minLiquidityUsd).toBeLessThan(
+      BALANCED_ALGORITHM_SETTINGS.minLiquidityUsd,
+    );
+    expect(BALANCED_ALGORITHM_SETTINGS.minLiquidityUsd).toBeLessThan(
+      DEFAULT_ALGORITHM_SETTINGS.minLiquidityUsd,
+    );
   });
 });

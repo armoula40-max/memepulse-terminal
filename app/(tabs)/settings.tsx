@@ -19,6 +19,8 @@ import {
 } from "@/lib/preferences";
 import {
   type AlgorithmSettings,
+  type FilterMode,
+  settingsForMode,
   VCS_ALGORITHM_SETTINGS,
 } from "@/lib/token-rules";
 import { loadPumpPortalKey, savePumpPortalKey } from "@/lib/pumpportal-key";
@@ -75,6 +77,9 @@ export default function SettingsScreen() {
     const numeric = Number(raw.replace(/[^0-9.]/g, ""));
     if (!Number.isFinite(numeric)) return;
     update({ ...prefs, algorithm: { ...prefs.algorithm, [key]: numeric } });
+  };
+  const setFilterMode = (filterMode: FilterMode) => {
+    update({ ...prefs, filterMode, algorithm: settingsForMode(filterMode) });
   };
   return (
     <ScreenContainer className="px-5" containerClassName="bg-background">
@@ -179,6 +184,49 @@ export default function SettingsScreen() {
             </View>
             <MaterialIcons name="chevron-right" size={18} color={C.bg} />
           </Pressable>
+          <Text style={styles.modeLabel}>FILTER MODE</Text>
+          <View style={styles.modeRow}>
+            {(
+              [
+                ["strict", "Strict", "Confirmed only"],
+                ["early", "Early Sniper", "Fast candidates"],
+                ["balanced", "Balanced", "Middle ground"],
+              ] as Array<[FilterMode, string, string]>
+            ).map(([mode, title, detail]) => (
+              <Pressable
+                key={mode}
+                onPress={() => setFilterMode(mode)}
+                style={[
+                  styles.modeButton,
+                  prefs.filterMode === mode && styles.modeButtonActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modeButtonTitle,
+                    prefs.filterMode === mode && styles.modeButtonTitleActive,
+                  ]}
+                >
+                  {title}
+                </Text>
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    prefs.filterMode === mode && styles.modeButtonTextActive,
+                  ]}
+                >
+                  {detail}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.modeDescription}>
+            {prefs.filterMode === "strict"
+              ? "Only fully verified candidates pass the Scanner filter."
+              : prefs.filterMode === "early"
+                ? "Lower early thresholds surface candidates sooner; not a confirmed buy signal."
+                : "A middle setting for earlier discovery with stronger confirmation."}
+          </Text>
           {algorithmFields.map((field) => (
             <View style={styles.ruleRow} key={field.key}>
               <Text style={styles.ruleLabel}>{field.label}</Text>
@@ -478,6 +526,28 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingBottom: 5,
   },
+  modeLabel: {
+    color: C.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginTop: 3,
+  },
+  modeRow: { flexDirection: "row", gap: 6 },
+  modeButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 9,
+    padding: 8,
+    minHeight: 56,
+  },
+  modeButtonActive: { backgroundColor: C.mint, borderColor: C.mint },
+  modeButtonTitle: { color: C.text, fontSize: 9, fontWeight: "900" },
+  modeButtonTitleActive: { color: C.bg },
+  modeButtonText: { color: C.muted, fontSize: 8, marginTop: 4 },
+  modeButtonTextActive: { color: "#184C38" },
+  modeDescription: { color: C.muted, fontSize: 9, lineHeight: 13 },
   vcsButton: {
     flexDirection: "row",
     alignItems: "center",

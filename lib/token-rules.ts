@@ -1,5 +1,7 @@
 import type { MarketToken } from "../server/market-data";
 
+export type FilterMode = "strict" | "early" | "balanced";
+
 export type AlgorithmSettings = {
   enabled: boolean;
   minLiquidityUsd: number;
@@ -30,6 +32,32 @@ export const DEFAULT_ALGORITHM_SETTINGS: AlgorithmSettings = {
   requireFreezeDisabled: true,
 };
 
+export const EARLY_SNIPER_ALGORITHM_SETTINGS: AlgorithmSettings = {
+  ...DEFAULT_ALGORITHM_SETTINGS,
+  minLiquidityUsd: 3_000,
+  minHolders10m: 20,
+  minHolders30m: 75,
+  maxTop10PctNew: 40,
+  maxTop10Pct30m: 35,
+  minMarketCapUsd: 8_000,
+  minVolume1hUsd: 1_000,
+  minBuyRatioPct: 52,
+  minMomentumPct: 3,
+};
+
+export const BALANCED_ALGORITHM_SETTINGS: AlgorithmSettings = {
+  ...DEFAULT_ALGORITHM_SETTINGS,
+  minLiquidityUsd: 7_500,
+  minHolders10m: 50,
+  minHolders30m: 110,
+  maxTop10PctNew: 35,
+  maxTop10Pct30m: 30,
+  minMarketCapUsd: 15_000,
+  minVolume1hUsd: 3_000,
+  minBuyRatioPct: 54,
+  minMomentumPct: 2,
+};
+
 export const VCS_ALGORITHM_SETTINGS: AlgorithmSettings = {
   ...DEFAULT_ALGORITHM_SETTINGS,
   minLiquidityUsd: 10_000,
@@ -38,6 +66,12 @@ export const VCS_ALGORITHM_SETTINGS: AlgorithmSettings = {
   minBuyRatioPct: 55,
   minMomentumPct: 2,
 };
+
+export function settingsForMode(mode: FilterMode): AlgorithmSettings {
+  if (mode === "early") return { ...EARLY_SNIPER_ALGORITHM_SETTINGS };
+  if (mode === "balanced") return { ...BALANCED_ALGORITHM_SETTINGS };
+  return { ...DEFAULT_ALGORITHM_SETTINGS };
+}
 
 export type AlgorithmResult = {
   eligible: boolean;
@@ -73,48 +107,32 @@ export function evaluateToken(
     failures.push(`Buy ratio < ${settings.minBuyRatioPct}%`);
   if (buyRatio === null) pending.push("Buy ratio");
   if (ageMinutes !== null && ageMinutes <= 10) {
-    if (token.holders === null || token.holders === undefined)
+    if (token.holders == null)
       pending.push(`Holders ≥ ${settings.minHolders10m} at 10m`);
     else if (token.holders < settings.minHolders10m)
       failures.push(`Holders < ${settings.minHolders10m} at 10m`);
-    if (token.top10Pct === null || token.top10Pct === undefined)
+    if (token.top10Pct == null)
       pending.push(`Top 10 ≤ ${settings.maxTop10PctNew}% at launch`);
     else if (token.top10Pct > settings.maxTop10PctNew)
       failures.push(`Top 10 > ${settings.maxTop10PctNew}%`);
   } else if (ageMinutes !== null && ageMinutes >= 30) {
-    if (token.holders === null || token.holders === undefined)
+    if (token.holders == null)
       pending.push(`Holders ≥ ${settings.minHolders30m} at 30m`);
     else if (token.holders < settings.minHolders30m)
       failures.push(`Holders < ${settings.minHolders30m} at 30m`);
-    if (token.top10Pct === null || token.top10Pct === undefined)
+    if (token.top10Pct == null)
       pending.push(`Top 10 ≤ ${settings.maxTop10Pct30m}% at 30m`);
     else if (token.top10Pct > settings.maxTop10Pct30m)
       failures.push(`Top 10 > ${settings.maxTop10Pct30m}%`);
   }
-  if (
-    settings.requireMintDisabled &&
-    token.mintAuthority !== null &&
-    token.mintAuthority !== undefined &&
-    token.mintAuthority !== false
-  )
-    failures.push("Mint authority active");
-  else if (
-    settings.requireMintDisabled &&
-    (token.mintAuthority === null || token.mintAuthority === undefined)
-  )
+  if (settings.requireMintDisabled && token.mintAuthority == null)
     pending.push("Mint authority");
-  if (
-    settings.requireFreezeDisabled &&
-    token.freezeAuthority !== null &&
-    token.freezeAuthority !== undefined &&
-    token.freezeAuthority !== false
-  )
-    failures.push("Freeze authority active");
-  else if (
-    settings.requireFreezeDisabled &&
-    (token.freezeAuthority === null || token.freezeAuthority === undefined)
-  )
+  else if (settings.requireMintDisabled && token.mintAuthority !== false)
+    failures.push("Mint authority active");
+  if (settings.requireFreezeDisabled && token.freezeAuthority == null)
     pending.push("Freeze authority");
+  else if (settings.requireFreezeDisabled && token.freezeAuthority !== false)
+    failures.push("Freeze authority active");
   const uniquePending = Array.from(new Set(pending));
   return {
     eligible: failures.length === 0 && uniquePending.length === 0,

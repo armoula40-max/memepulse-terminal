@@ -264,7 +264,7 @@ export default function PaperScreen() {
             <Text style={styles.kicker}>PAPER EXCHANGE</Text>
             <Text style={styles.title}>Trading account</Text>
             <Text style={styles.subtitle}>
-              Live quotes · simulated orders · local ledger
+              All loaded market tokens · simulated orders · local ledger
             </Text>
           </View>
           <View style={styles.badge}>
@@ -316,7 +316,7 @@ export default function PaperScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.tokenRow}
               >
-                {tokens.slice(0, 20).map((token) => (
+                {tokens.map((token) => (
                   <Pressable
                     key={token.address}
                     onPress={() => setSelectedAddress(token.address)}
