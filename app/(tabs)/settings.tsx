@@ -25,6 +25,7 @@ import {
 } from "@/lib/token-rules";
 import { loadPumpPortalKey, savePumpPortalKey } from "@/lib/pumpportal-key";
 import {
+  configurePaperAutoBuy,
   startPumpPortalBackground,
   stopPumpPortalBackground,
 } from "@/lib/pumpportal-background";
@@ -69,6 +70,8 @@ export default function SettingsScreen() {
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [pumpPortalKey, setPumpPortalKey] = useState("");
   const [pumpPortalSaved, setPumpPortalSaved] = useState(false);
+  const [paperAutoBuy, setPaperAutoBuy] = useState(false);
+  const [paperAutoBuyAmount, setPaperAutoBuyAmount] = useState("100");
   useEffect(() => {
     loadPreferences().then(setPrefs);
     loadPumpPortalKey().then((value) => setPumpPortalKey(value));
@@ -354,6 +357,53 @@ export default function SettingsScreen() {
           </View>
         </View>
         <Text style={styles.section}>TRADING MODE</Text>
+        <View style={styles.autoBuyCard}>
+          <View style={styles.settingRow}>
+            <View style={styles.settingCopy}>
+              <Text style={styles.settingTitle}>
+                Paper Auto-Buy in background
+              </Text>
+              <Text style={styles.settingDescription}>
+                Simulated only. The phone service checks the selected filter
+                mode and records BUY orders locally.
+              </Text>
+            </View>
+            <Switch
+              value={paperAutoBuy}
+              onValueChange={(value) => {
+                setPaperAutoBuy(value);
+                configurePaperAutoBuy(
+                  value,
+                  Number(paperAutoBuyAmount) || 100,
+                  prefs.filterMode,
+                );
+              }}
+              trackColor={{ false: "#1A3029", true: "#2C7459" }}
+              thumbColor={paperAutoBuy ? C.mint : C.muted}
+            />
+          </View>
+          <View style={styles.autoBuyRow}>
+            <Text style={styles.ruleLabel}>MAX SIMULATED ORDER</Text>
+            <TextInput
+              value={paperAutoBuyAmount}
+              onChangeText={(value) => {
+                setPaperAutoBuyAmount(value);
+                if (paperAutoBuy)
+                  configurePaperAutoBuy(
+                    true,
+                    Number(value) || 100,
+                    prefs.filterMode,
+                  );
+              }}
+              keyboardType="decimal-pad"
+              style={styles.autoBuyInput}
+            />
+            <Text style={styles.ruleSuffix}>USD</Text>
+          </View>
+          <Text style={styles.keyWarning}>
+            No real transaction or wallet signing. Maximum per order is $1,000.
+          </Text>
+        </View>
         <Setting
           icon="science"
           title="Paper trading only"
@@ -607,6 +657,33 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 12,
     gap: 10,
+  },
+  autoBuyCard: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 15,
+    padding: 12,
+    gap: 10,
+  },
+  settingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  autoBuyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 9,
+  },
+  autoBuyInput: {
+    color: C.text,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 8,
+    height: 34,
+    minWidth: 80,
+    paddingHorizontal: 8,
+    textAlign: "right",
   },
   walletHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   walletProviders: { flexDirection: "row", gap: 8 },

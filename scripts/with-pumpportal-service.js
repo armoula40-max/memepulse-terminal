@@ -24,11 +24,18 @@ public class PumpPortalForegroundService extends Service {
   WebSocket socket;
   String apiKey = "";
   java.util.HashSet<String> seen = new java.util.HashSet<>();
+  boolean autoBuy = false;
+  double autoBuyUsd = 100.0;
+  String autoBuyMode = "strict";
 
   @Override public void onCreate() {
     super.onCreate();
     createChannel();
     client = new OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build();
+    android.content.SharedPreferences paper = getSharedPreferences("paper_auto_buy", MODE_PRIVATE);
+    autoBuy = paper.getBoolean("enabled", false);
+    autoBuyUsd = Double.longBitsToDouble(paper.getLong("amount", Double.doubleToLongBits(100.0)));
+    autoBuyMode = paper.getString("mode", "strict");
   }
   @Override public int onStartCommand(Intent intent, int flags, int startId) {
     if (intent != null && ACTION_STOP.equals(intent.getAction())) { stopSelf(); return START_NOT_STICKY; }
@@ -58,6 +65,7 @@ public class PumpPortalForegroundService extends Service {
       String symbol = item.optString("symbol", "UNKNOWN");
       String name = item.optString("name", "New token");
       notifyToken(symbol, name, mint);
+      if (autoBuy) evaluatePaperAutoBuy(mint, symbol);
     } catch (Exception ignored) {}
   }
   void notifyToken(String symbol, String name, String mint) {
@@ -70,6 +78,51 @@ public class PumpPortalForegroundService extends Service {
       .setAutoCancel(true).setCategory(Notification.CATEGORY_MESSAGE).setPriority(Notification.PRIORITY_HIGH).build();
     manager.notify((int)(System.currentTimeMillis() % 1000000), notification);
   }
+  void evaluatePaperAutoBuy(String mint, String symbol) {
+    Request request = new Request.Builder().url("https://api.dexscreener.com/latest/dex/tokens/" + mint).build();
+    client.newCall(request).enqueue(new Callback() {
+      public void onFailure(Call call, java.io.IOException e) {}
+      public void onResponse(Call call, Response response) throws java.io.IOException {
+        if (!response.isSuccessful() || response.body() == null) return;
+        try {
+          JSONObject root = new JSONObject(response.body().string());
+          org.json.JSONArray pairs = root.optJSONArray("pairs");
+          if (pairs == null || pairs.length() == 0) return;
+          JSONObject pair = pairs.getJSONObject(0);
+          JSONObject liq = pair.optJSONObject("liquidity");
+          JSONObject vol = pair.optJSONObject("volume");
+          JSONObject change = pair.optJSONObject("priceChange");
+          JSONObject tx = pair.optJSONObject("txns");
+          JSONObject h1 = tx == null ? null : tx.optJSONObject("h1");
+          double price = pair.optDouble("priceUsd", 0);
+          double liquidity = liq == null ? 0 : liq.optDouble("usd", 0);
+          double volume = vol == null ? 0 : vol.optDouble("h1", 0);
+          double mc = pair.optDouble("marketCap", pair.optDouble("fdv", 0));
+          double momentum = change == null ? 0 : change.optDouble("h1", 0);
+          double buys = h1 == null ? 0 : h1.optDouble("buys", 0);
+          double sells = h1 == null ? 0 : h1.optDouble("sells", 0);
+          double ratio = buys + sells > 0 ? buys * 100.0 / (buys + sells) : 0;
+          double minLiq = "early".equals(autoBuyMode) ? 3000 : ("balanced".equals(autoBuyMode) ? 7500 : 10000);
+          double minMc = "early".equals(autoBuyMode) ? 8000 : ("balanced".equals(autoBuyMode) ? 15000 : 20000);
+          double minVol = "early".equals(autoBuyMode) ? 1000 : ("balanced".equals(autoBuyMode) ? 3000 : 5000);
+          double minBuy = "early".equals(autoBuyMode) ? 52 : ("balanced".equals(autoBuyMode) ? 54 : 55);
+          if (price <= 0 || liquidity < minLiq || mc < minMc || volume < minVol || ratio < minBuy || momentum < ("early".equals(autoBuyMode) ? 3 : ("balanced".equals(autoBuyMode) ? 2 : 0))) return;
+          savePaperOrder(mint, symbol, price, ratio, liquidity, mc);
+        } catch (Exception ignored) {}
+      }
+    });
+  }
+  void savePaperOrder(String mint, String symbol, double price, double ratio, double liquidity, double mc) {
+    android.content.SharedPreferences p = getSharedPreferences("paper_auto_buy", MODE_PRIVATE);
+    try {
+      org.json.JSONArray orders = new org.json.JSONArray(p.getString("orders", "[]"));
+      for (int i = 0; i < orders.length(); i++) if (mint.equals(orders.getJSONObject(i).optString("address"))) return;
+      JSONObject order = new JSONObject(); order.put("id", "auto-" + System.currentTimeMillis()); order.put("address", mint); order.put("symbol", symbol); order.put("side", "BUY"); order.put("notionalUsd", autoBuyUsd); order.put("fillPriceUsd", price); order.put("qty", autoBuyUsd / price); order.put("feeUsd", autoBuyUsd * 0.003); order.put("createdAt", new java.util.Date().toString()); order.put("status", "FILLED"); order.put("mode", autoBuyMode); order.put("buyRatio", ratio); order.put("liquidityUsd", liquidity); order.put("marketCapUsd", mc);
+      orders.put(order); p.edit().putString("orders", orders.toString()).apply();
+      notifyAutoBuy(symbol);
+    } catch (Exception ignored) {}
+  }
+  void notifyAutoBuy(String symbol) { NotificationManager manager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE); Notification n = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("PAPER AUTO-BUY · $" + symbol).setContentText("Simulated order · $" + String.format(java.util.Locale.US, "%.2f", autoBuyUsd) + " · " + autoBuyMode).setAutoCancel(true).setPriority(Notification.PRIORITY_HIGH).build(); manager.notify((int)(System.currentTimeMillis() % 1000000), n); }
   Notification persistent(String text) { return new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("MemePulse background monitor").setContentText(text).setOngoing(true).setCategory(Notification.CATEGORY_SERVICE).build(); }
   void createChannel() { if (Build.VERSION.SDK_INT >= 26) { NotificationChannel c = new NotificationChannel(CHANNEL, "PumpPortal monitoring", NotificationManager.IMPORTANCE_HIGH); c.setDescription("Instant new-token notifications"); ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c); } }
   @Override public void onDestroy() { if (socket != null) socket.close(1000, "service stopped"); if (client != null) client.dispatcher().executorService().shutdown(); super.onDestroy(); }
@@ -85,6 +138,8 @@ public class PumpPortalServiceModule extends ReactContextBaseJavaModule {
   @Override public String getName() { return "PumpPortalService"; }
   @ReactMethod public void start(String apiKey) { Intent i = new Intent(getReactApplicationContext(), PumpPortalForegroundService.class); i.setAction(PumpPortalForegroundService.ACTION_START); i.putExtra("apiKey", apiKey); if (android.os.Build.VERSION.SDK_INT >= 26) getReactApplicationContext().startForegroundService(i); else getReactApplicationContext().startService(i); }
   @ReactMethod public void stop() { getReactApplicationContext().stopService(new Intent(getReactApplicationContext(), PumpPortalForegroundService.class)); }
+  @ReactMethod public void configureAutoBuy(boolean enabled, double amount, String mode) { getReactApplicationContext().getSharedPreferences("paper_auto_buy", 0).edit().putBoolean("enabled", enabled).putLong("amount", Double.doubleToLongBits(Math.max(1.0, Math.min(amount, 1000.0)))).putString("mode", mode == null ? "strict" : mode).apply(); }
+  @ReactMethod public void getAutoBuyOrders(Promise promise) { promise.resolve(getReactApplicationContext().getSharedPreferences("paper_auto_buy", 0).getString("orders", "[]")); }
 }
 `;
 const PACKAGE_SOURCE = `package ${PACKAGE};

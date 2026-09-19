@@ -13,6 +13,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import { simulateFill } from "@/lib/simulation";
 import { useDirectPumpPortal } from "@/lib/pumpportal-client";
+import { loadPaperAutoBuyOrders } from "@/lib/pumpportal-background";
 
 const C = {
   bg: "#07100F",
@@ -79,6 +80,47 @@ export default function PaperScreen() {
   useEffect(() => {
     void AsyncStorage.getItem(LEDGER_KEY).then((raw) => {
       if (raw) setLedger({ ...EMPTY_LEDGER, ...JSON.parse(raw) });
+    });
+  }, []);
+  useEffect(() => {
+    void loadPaperAutoBuyOrders().then((orders) => {
+      if (!orders.length) return;
+      setLedger((current) => {
+        const incoming = (orders as Order[]).filter(
+          (order) => !current.orders.some((item) => item.id === order.id),
+        );
+        const positions = [...current.positions];
+        for (const order of incoming) {
+          const position = positions.find(
+            (item) => item.address === order.address,
+          );
+          if (position) {
+            position.qty += order.qty;
+            position.investedUsd += order.notionalUsd;
+            position.avgEntryUsd = position.investedUsd / position.qty;
+          } else {
+            positions.push({
+              address: order.address,
+              symbol: order.symbol,
+              qty: order.qty,
+              avgEntryUsd: order.fillPriceUsd,
+              investedUsd: order.notionalUsd,
+              realizedPnlUsd: 0,
+            });
+          }
+        }
+        return {
+          ...current,
+          cashUsd:
+            current.cashUsd -
+            incoming.reduce(
+              (sum, order) => sum + order.notionalUsd + order.feeUsd,
+              0,
+            ),
+          positions,
+          orders: [...current.orders, ...incoming],
+        };
+      });
     });
   }, []);
   useEffect(() => {
