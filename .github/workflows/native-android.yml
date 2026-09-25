@@ -25,10 +25,10 @@ jobs:
         working-directory: native-android
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleRelease --no-daemon --stacktrace
+          ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
       - name: Publish APK release
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           TAG="solana-signal-${GITHUB_RUN_ID}"
-          cp native-android/app/build/outputs/apk/release/app-release.apk Solana-Signal-release.apk
-          gh release create "$TAG" Solana-Signal-release.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solana Signal Native Android $GITHUB_RUN_NUMBER" --notes "Native Kotlin/Compose signal-only build. No wallet, signing, or automatic trading."
+          cp native-android/app/build/outputs/apk/debug/app-debug.apk Solana-Signal-debug.apk
+          gh release create "$TAG" Solana-Signal-debug.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solana Signal Native Android test build $GITHUB_RUN_NUMBER" --notes "Native Kotlin/Compose signal-only build. No wallet, signing, or automatic trading."
