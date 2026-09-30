@@ -10,6 +10,8 @@ import com.solanasignal.engineb.EngineBSafetyContext
 import com.solanasignal.engineb.EngineBTradeObservation
 import com.solanasignal.engineb.EngineBTradeSide
 import com.solanasignal.network.*
+import com.solanasignal.paper.PaperMarketInput
+import com.solanasignal.paper.PaperTradingRepository
 import com.solanasignal.security.Secrets
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.*
 class SignalRepository(context: Context) {
     private val db = SignalDatabase.get(context)
     private val dao = db.dao()
+    private val paperTrading = PaperTradingRepository(db)
     private val secrets = Secrets(context)
     private val manager = PumpPortalWebSocketManager { secrets.getPumpPortalKey() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -97,8 +100,12 @@ class SignalRepository(context: Context) {
             is NormalizedTokenCreatedEvent -> {
                 persistTokenSnapshot(state, event)
                 manager.subscribeToken(event.mint)
+                updatePaperObservation(event, state, allowEntry = false)
             }
-            is NormalizedMigrationEvent -> persistTokenSnapshot(state, event)
+            is NormalizedMigrationEvent -> {
+                persistTokenSnapshot(state, event)
+                updatePaperObservation(event, state, allowEntry = false)
+            }
             is NormalizedTradeEvent -> {
                 persistTokenSnapshot(state, event)
                 onTrade(event, state)
@@ -166,7 +173,11 @@ class SignalRepository(context: Context) {
         )
     }
 
-    private suspend fun onTrade(event: NormalizedTradeEvent, state: LiveMarketState) {
+    private suspend fun updatePaperObservation(
+        event: NormalizedProviderEvent,
+        state: LiveMarketState,
+        allowEntry: Boolean,
+    ): List<TradeEntity> {
         val rows = dao.tradesSince(event.mint, System.currentTimeMillis() - 300_000)
         val history = rows.mapNotNull { it.toEngineBTradeObservation() }
         val token = dao.token(event.mint)
@@ -181,7 +192,36 @@ class SignalRepository(context: Context) {
             else -> EngineBObservedValue.unknown(creatorObservedAt, "normalized_create_event")
         }
         val safetyContext = EngineBSafetyContext(creatorIdentity = creatorIdentity)
-        _engineBResults.tryEmit(EngineB.evaluate(EngineBInput(state, history, safetyContext = safetyContext)))
+        val engineBResult = EngineB.evaluate(EngineBInput(state, history, safetyContext = safetyContext))
+        _engineBResults.tryEmit(engineBResult)
+        try {
+            paperTrading.process(
+                PaperMarketInput(
+                    signalId = "engine-b:${event.eventId}",
+                    result = engineBResult,
+                    marketState = state,
+                    tokenSymbol = token?.symbol,
+                    allowEntry = allowEntry,
+                ),
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            dao.insertSystemEvent(
+                SystemEventEntity(
+                    id = "paper-failure:${event.eventId}",
+                    timestamp = event.observationTimestamp,
+                    level = "ERROR",
+                    type = "PAPER_TRADING",
+                    message = failure.message?.take(500) ?: "Paper simulation could not persist this observation",
+                ),
+            )
+        }
+        return rows
+    }
+
+    private suspend fun onTrade(event: NormalizedTradeEvent, state: LiveMarketState) {
+        val rows = updatePaperObservation(event, state, allowEntry = true)
         val buysRows = rows.filter { it.txType.equals("buy", true) }
         val sellsRows = rows.filter { it.txType.equals("sell", true) }
         val buys = buysRows.size
