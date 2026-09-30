@@ -168,7 +168,7 @@ class EngineBTest {
     }
 
     @Test fun engineVersionIsExposedOnEveryResult() {
-        assertEquals("B.0.1", EngineB.evaluate(watchableState()).engineVersion)
+        assertEquals("B.1.0", EngineB.evaluate(watchableState()).engineVersion)
         assertEquals(EngineB.VERSION, EngineB.evaluate(unknownState()).engineVersion)
     }
 

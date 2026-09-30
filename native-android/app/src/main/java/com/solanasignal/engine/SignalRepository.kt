@@ -3,9 +3,14 @@ package com.solanasignal.engine
 import android.content.Context
 import androidx.room.withTransaction
 import com.solanasignal.data.*
+import com.solanasignal.engineb.EngineB
+import com.solanasignal.engineb.EngineBInput
+import com.solanasignal.engineb.EngineBTradeObservation
+import com.solanasignal.engineb.EngineBTradeSide
 import com.solanasignal.network.*
 import com.solanasignal.security.Secrets
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 
 class SignalRepository(context: Context) {
@@ -16,6 +21,11 @@ class SignalRepository(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val recentEventIds = RecentEventIds()
     private val _liveMarketStates = MutableStateFlow<Map<String, LiveMarketState>>(emptyMap())
+    private val _engineBResults = MutableSharedFlow<com.solanasignal.engineb.EngineBResult>(
+        replay = 0,
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     private var collector: Job? = null
 
     val connection = manager.state
@@ -23,6 +33,8 @@ class SignalRepository(context: Context) {
     val signals = dao.signals()
     val tokens = dao.tokens()
     val liveMarketStates: StateFlow<Map<String, LiveMarketState>> = _liveMarketStates.asStateFlow()
+    /** Bounded, non-persistent output; consumers can observe Engine B without affecting Baseline A. */
+    val engineBResults: SharedFlow<com.solanasignal.engineb.EngineBResult> = _engineBResults.asSharedFlow()
 
     fun setApiKey(value: String) { secrets.setPumpPortalKey(value) }
     fun apiKeyConfigured() = secrets.getPumpPortalKey().isNotBlank()
@@ -154,6 +166,8 @@ class SignalRepository(context: Context) {
 
     private suspend fun onTrade(event: NormalizedTradeEvent, state: LiveMarketState) {
         val rows = dao.tradesSince(event.mint, System.currentTimeMillis() - 300_000)
+        val history = rows.mapNotNull { it.toEngineBTradeObservation() }
+        _engineBResults.tryEmit(EngineB.evaluate(EngineBInput(state, history)))
         val buysRows = rows.filter { it.txType.equals("buy", true) }
         val sellsRows = rows.filter { it.txType.equals("sell", true) }
         val buys = buysRows.size
@@ -259,6 +273,59 @@ class SignalRepository(context: Context) {
             observationTimestamp = observationTimestamp,
             freshnessMs = PumpPortalNormalizer.freshnessMs(this, observationTimestamp),
             providerSequence = providerSequence,
+        )
+    }
+
+    private fun TradeEntity.toEngineBTradeObservation(): EngineBTradeObservation? {
+        val side = when (txType?.lowercase()) {
+            "buy" -> EngineBTradeSide.BUY
+            "sell" -> EngineBTradeSide.SELL
+            else -> return null
+        }
+        val observed = observationTimestamp ?: receivedTimestamp ?: timestamp
+        val received = receivedTimestamp ?: observed
+        return EngineBTradeObservation(
+            eventId = dedupeKey,
+            side = side,
+            trader = trader,
+            observationTimestamp = observed,
+            providerTimestamp = providerTimestamp,
+            providerSequence = providerSequence,
+            solAmount = storedTradeValue(solAmount, solAmountAvailability, providerTimestamp, received, observed, freshnessMs),
+            priceNative = storedTradeValue(priceNative, priceNativeAvailability, providerTimestamp, received, observed, freshnessMs),
+            priceUsd = storedTradeValue(priceUsd, priceUsdAvailability, providerTimestamp, received, observed, freshnessMs),
+            marketCapUsd = storedTradeValue(marketCapUsd, marketCapUsdAvailability, providerTimestamp, received, observed, freshnessMs),
+        )
+    }
+
+    private fun storedTradeValue(
+        value: Double?,
+        rawAvailability: String,
+        provider: Long?,
+        received: Long,
+        observed: Long,
+        freshnessMs: Long?,
+    ): MarketValue<Double> {
+        val computed = MarketValue.of(value, provider, received, observed)
+        val stored = runCatching { FieldAvailability.valueOf(rawAvailability) }.getOrNull()
+        val availability = when {
+            value == null -> FieldAvailability.UNKNOWN
+            stored == null -> computed.availability
+            stored == FieldAvailability.UNKNOWN -> FieldAvailability.UNKNOWN
+            stored == FieldAvailability.ZERO && value != 0.0 -> FieldAvailability.UNKNOWN
+            stored == FieldAvailability.KNOWN && value == 0.0 -> FieldAvailability.ZERO
+            else -> stored
+        }
+        if (availability == FieldAvailability.UNKNOWN) {
+            return MarketValue.unknown(provider, received, observed)
+        }
+        return MarketValue(
+            value = value,
+            availability = availability,
+            providerTimestamp = provider,
+            receivedTimestamp = received,
+            observationTimestamp = observed,
+            freshnessMs = freshnessMs ?: computed.freshnessMs,
         )
     }
 
