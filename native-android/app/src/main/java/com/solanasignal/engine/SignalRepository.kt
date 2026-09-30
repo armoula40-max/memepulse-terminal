@@ -5,6 +5,8 @@ import androidx.room.withTransaction
 import com.solanasignal.data.*
 import com.solanasignal.engineb.EngineB
 import com.solanasignal.engineb.EngineBInput
+import com.solanasignal.engineb.EngineBObservedValue
+import com.solanasignal.engineb.EngineBSafetyContext
 import com.solanasignal.engineb.EngineBTradeObservation
 import com.solanasignal.engineb.EngineBTradeSide
 import com.solanasignal.network.*
@@ -167,7 +169,19 @@ class SignalRepository(context: Context) {
     private suspend fun onTrade(event: NormalizedTradeEvent, state: LiveMarketState) {
         val rows = dao.tradesSince(event.mint, System.currentTimeMillis() - 300_000)
         val history = rows.mapNotNull { it.toEngineBTradeObservation() }
-        _engineBResults.tryEmit(EngineB.evaluate(EngineBInput(state, history)))
+        val token = dao.token(event.mint)
+        val creatorObservedAt = token?.createdAt ?: token?.firstSeenAt
+        val creatorIdentity = when {
+            token == null -> EngineBObservedValue.unavailable<String>("normalized_create_event")
+            !token.creator.isNullOrBlank() && creatorObservedAt != null -> EngineBObservedValue.available(
+                token.creator,
+                creatorObservedAt,
+                source = "normalized_create_event",
+            )
+            else -> EngineBObservedValue.unknown(creatorObservedAt, "normalized_create_event")
+        }
+        val safetyContext = EngineBSafetyContext(creatorIdentity = creatorIdentity)
+        _engineBResults.tryEmit(EngineB.evaluate(EngineBInput(state, history, safetyContext = safetyContext)))
         val buysRows = rows.filter { it.txType.equals("buy", true) }
         val sellsRows = rows.filter { it.txType.equals("sell", true) }
         val buys = buysRows.size
@@ -292,6 +306,7 @@ class SignalRepository(context: Context) {
             providerTimestamp = providerTimestamp,
             providerSequence = providerSequence,
             solAmount = storedTradeValue(solAmount, solAmountAvailability, providerTimestamp, received, observed, freshnessMs),
+            tokenAmount = storedTradeValue(tokenAmount, tokenAmountAvailability, providerTimestamp, received, observed, freshnessMs),
             priceNative = storedTradeValue(priceNative, priceNativeAvailability, providerTimestamp, received, observed, freshnessMs),
             priceUsd = storedTradeValue(priceUsd, priceUsdAvailability, providerTimestamp, received, observed, freshnessMs),
             marketCapUsd = storedTradeValue(marketCapUsd, marketCapUsdAvailability, providerTimestamp, received, observed, freshnessMs),

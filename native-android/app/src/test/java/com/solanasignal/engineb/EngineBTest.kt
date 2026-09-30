@@ -116,7 +116,8 @@ class EngineBTest {
         val result = EngineB.evaluate(watchableState())
         assertNotSame(result.pumpPotential, result.collapseRisk)
         assertEquals(EngineBAxisLevel.NOT_ASSESSED, result.pumpPotential.level)
-        assertEquals(EngineBAxisLevel.NOT_ASSESSED, result.collapseRisk.level)
+        assertEquals(EngineBAxisLevel.UNASSESSED, result.collapseRisk.level)
+        assertTrue(result.collapseRisk.reasons.any { it.contains("not treated as safe") })
     }
 
     @Test fun highPotentialAndHighRiskCanCoexistInTheContract() {
@@ -135,7 +136,7 @@ class EngineBTest {
         assertTrue(result.featuresUsed.all { it.value == null && it.availability == FieldAvailability.UNKNOWN })
         assertEquals(result.featuresUsed.map { it.name }.toSet(), result.unknownFields.toSet())
         assertEquals(EngineBAxisLevel.NOT_ASSESSED, result.pumpPotential.level)
-        assertEquals(EngineBAxisLevel.NOT_ASSESSED, result.collapseRisk.level)
+        assertEquals(EngineBAxisLevel.UNASSESSED, result.collapseRisk.level)
     }
 
     @Test fun completeCanonicalObservationsAreReportedAsComplete() {
@@ -168,7 +169,7 @@ class EngineBTest {
     }
 
     @Test fun engineVersionIsExposedOnEveryResult() {
-        assertEquals("B.1.0", EngineB.evaluate(watchableState()).engineVersion)
+        assertEquals("B.2.0", EngineB.evaluate(watchableState()).engineVersion)
         assertEquals(EngineB.VERSION, EngineB.evaluate(unknownState()).engineVersion)
     }
 

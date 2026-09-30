@@ -216,7 +216,7 @@ class EngineBPhase4Test {
         assertTrue(result.reasons.contains("accelerating_price"))
     }
 
-    @Test fun aPriceSpikeFollowedByDeclineIsWeakeningAndNotAHighPotentialSignal() {
+    @Test fun aPriceSpikeFollowedByDeclineRemainsWeakeningButIsMarkedRiskByTheNewGate() {
         val result = evaluate(
             listOf(
                 trade(1, asOf - 26_000, priceUsd = 0.02),
@@ -231,7 +231,9 @@ class EngineBPhase4Test {
         assertTrue(numeric(result, "pricePullbackPctUsd_60s")!! > 0.0)
         assertEquals(0.0, numeric(result, "persistentBuyPressure_30s")!!, 0.0)
         assertEquals(EngineBLifecycleState.WEAKENING, result.lifecycleState)
-        assertEquals(EngineBSignalState.WEAKENING, result.signalState)
+        assertEquals(EngineBSignalState.RISK, result.signalState)
+        assertEquals(EngineBAxisLevel.HIGH, result.collapseRisk.level)
+        assertTrue(result.collapseRisk.evidence.contains("rapidPullbackAfterAcceleration_60s"))
         assertTrue(result.reasons.contains("momentum_weakening"))
         assertFalse(result.reasons.contains("persistent_buy_pressure"))
         assertFalse(result.pumpPotential.level == EngineBAxisLevel.HIGH)
