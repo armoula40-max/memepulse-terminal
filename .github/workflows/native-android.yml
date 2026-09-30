@@ -26,5 +26,8 @@ jobs:
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           TAG="solana-signal-${GITHUB_RUN_ID}"
-          cp native-android/app/build/outputs/apk/release/app-release.apk Solana-Signal-release.apk
-          gh release create "$TAG" Solana-Signal-release.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solana Signal Native Android $GITHUB_RUN_NUMBER" --notes "Native Kotlin/Compose signal-only build. No wallet, signing, or automatic trading."
+          APK="native-android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -s "$APK"
+          cp "$APK" Solana-Signal-release.apk
+          sha256sum Solana-Signal-release.apk
+          gh release create "$TAG" Solana-Signal-release.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solana Signal Native Android $GITHUB_RUN_NUMBER" --notes "Unsigned native Kotlin/Compose release-variant APK; it must be signed before installation. No wallet, transaction signing, or automatic trading."
