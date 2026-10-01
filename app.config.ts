@@ -37,6 +37,12 @@ const env = {
   iosBundleId: bundleId,
   androidPackage: bundleId,
 };
+// The GitHub debug-test path preserves the established Gradle debug signer.
+// Every other build continues to use the secret-backed release signer plugin.
+const releaseSigningPlugins =
+  process.env.MEMEPULSE_DEBUG_TEST_BUILD === "1"
+    ? []
+    : ["./scripts/with-memepulse-release-signing.js"];
 
 const config: ExpoConfig = {
   name: env.appName,
@@ -87,7 +93,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-background-task",
-    "./scripts/with-memepulse-release-signing.js",
+    ...releaseSigningPlugins,
     ["expo-notifications", { sounds: ["./assets/sounds/shopify_catch.wav"] }],
     [
       "expo-audio",
