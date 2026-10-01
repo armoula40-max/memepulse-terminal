@@ -36,7 +36,7 @@ export default function WalletScreen() {
           setActivities((old) => mergeActivities(old, newActivities));
           if (shouldNotify && buyAlerts) for (const activity of newActivities) if (activity.kind === "BUY_CONFIRMED" || (pendingAlerts && activity.kind === "BUY_PENDING")) void notifyWalletBuy(activity);
           setWallets((old) => old.map((item) => item.id === wallet.id ? { ...item, status: "CONNECTED", lastSyncedAt: result.syncedAt, lastActivityAt: result.activities[0]?.observedAt ?? item.lastActivityAt, error: null } : item));
-        } catch (error) { setWallets((old) => old.map((item) => item.id === wallet.id ? { ...item, status: "ERROR", error: error instanceof Error ? error.message : "Provider unavailable" } : item)); }
+        } catch (error) { const detail = error instanceof Error && error.message ? error.message : String(error || "Provider unavailable"); setWallets((old) => old.map((item) => item.id === wallet.id ? { ...item, status: "ERROR", error: detail } : item)); }
       }
     };
     void sync();

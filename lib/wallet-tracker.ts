@@ -20,8 +20,15 @@ export function photonTokenUrl(mint: string | null): string | null { return mint
 export async function loadWalletTracker(): Promise<WalletTrackerState> { try { const raw = await AsyncStorage.getItem(STORAGE_KEY); return raw ? { ...emptyState, ...JSON.parse(raw) } : emptyState; } catch { return emptyState; } }
 export async function saveWalletTracker(state: WalletTrackerState): Promise<void> { await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  return Promise.race([
+    fetch(url, init),
+    new Promise<Response>((_, reject) => setTimeout(() => reject(new Error("RPC_TIMEOUT")), timeoutMs)),
+  ]);
+}
+
 async function rpc(method: string, params: unknown[]): Promise<any> {
-  const response = await fetch(SOLANA_RPC_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }), signal: AbortSignal.timeout(12_000) });
+  const response = await fetchWithTimeout(SOLANA_RPC_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }) }, 12_000);
   if (!response.ok) throw new Error(`RPC_${response.status}`);
   const payload = await response.json() as any;
   if (payload.error) throw new Error(String(payload.error.message ?? "RPC_ERROR"));
