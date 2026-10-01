@@ -17,7 +17,7 @@ permissions:
 
 env:
   CI: true
-  EXPO_PUBLIC_LOCAL_ONLY: true
+  EXPO_PUBLIC_LOCAL_ONLY: "false"
   EXPO_PUBLIC_PUMPPORTAL_LIVE: true
 
 jobs:
