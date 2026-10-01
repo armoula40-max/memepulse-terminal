@@ -27,12 +27,13 @@ export const appRouter = router({
   }),
 
   market: router({
-    latest: publicProcedure.query(async () => ({
-      source: "Dexscreener public API",
-      chain: "solana",
-      observedAt: new Date().toISOString(),
-      tokens: (latestTokens = (await fetchLatestMarketSnapshot()).filter((token) => { const created = token.pairCreatedAt ? new Date(token.pairCreatedAt).getTime() : 0; const age = Date.now() - created; return created > 0 && age >= 0 && age <= 60 * 60 * 1000; }).slice(0, 150)),
-    })),
+    latest: publicProcedure.query(async () => {
+      const tokens = (latestTokens = (await fetchLatestMarketSnapshot()).filter((token) => { const created = token.pairCreatedAt ? new Date(token.pairCreatedAt).getTime() : 0; const age = Date.now() - created; return created > 0 && age >= 0 && age <= 60 * 60 * 1000; }).slice(0, 150));
+      const observedAt = tokens.reduce<string | null>((latest, token) => !latest || token.observedAt > latest ? token.observedAt : latest, null);
+      const ageSeconds = observedAt ? Math.max(0, (Date.now() - new Date(observedAt).getTime()) / 1000) : Number.POSITIVE_INFINITY;
+      const freshness = ageSeconds <= 5 ? "LIVE" : ageSeconds <= 20 ? "DELAYED" : ageSeconds < 60 ? "STALE" : "UNKNOWN";
+      return { source: "Dexscreener public API", chain: "solana", observedAt, receivedAt: new Date().toISOString(), freshness, tokens };
+    }),
     history: publicProcedure.input(z.object({ address: z.string().min(20).max(64) })).query(async ({ input }) => ({
       address: input.address,
       source: "server_snapshot_history",
