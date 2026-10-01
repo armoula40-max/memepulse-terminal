@@ -7,7 +7,7 @@ import { accountEquity, createPaperAccount, executePaperOrder, loadPaperAccount,
 import { openTokenLink } from "@/lib/token-links";
 import { DEFAULT_PREFERENCES, loadPreferences, savePreferences } from "@/lib/preferences";
 
-const C = { bg: "#07100F", surface: "#0D1B18", border: "#1C3A33", text: "#F2F8F5", muted: "#88A69A", mint: "#76F2B6", mintSoft: "#143E30", amber: "#F8C36A", red: "#FF7B80", blue: "#8BB8FF" };
+const C = { bg: "#07111F", surface: "#0D1B2A", border: "#1D3852", text: "#F4F8FC", muted: "#8FA6BC", mint: "#23E6A0", mintSoft: "#123E3A", amber: "#F6C667", red: "#FF7180", blue: "#59D6FF" };
 export default function PaperScreen() {
   const market = trpc.market.latest.useQuery(undefined, { staleTime: 5_000, refetchInterval: 15_000 });
   const [account, setAccount] = useState<PaperAccount>(() => createPaperAccount());

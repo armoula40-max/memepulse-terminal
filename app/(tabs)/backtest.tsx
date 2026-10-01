@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { executePaperOrder, loadPaperAccount, savePaperAccount, type PaperAccount } from "@/lib/paper-ledger";
 import { buildLiveMarketReport, captureLiveMarket, loadLiveMarket, type LiveMarketItem } from "@/lib/live-market";
 import { loadPumpPortalTokens, startPumpPortalLiveStream, stopPumpPortalLiveStream } from "@/lib/pumpportal-live";
-const C = { bg: "#07100F", surface: "#0D1B18", border: "#1C3A33", text: "#F2F8F5", muted: "#88A69A", mint: "#76F2B6", amber: "#F8C36A", red: "#FF7B80", blue: "#8BB8FF" };
+const C = { bg: "#07111F", surface: "#0D1B2A", border: "#1D3852", text: "#F4F8FC", muted: "#8FA6BC", mint: "#23E6A0", amber: "#F6C667", red: "#FF7180", blue: "#59D6FF" };
 export default function LiveMarketScreen() {
   const market = trpc.market.latest.useQuery(undefined, { staleTime: 2_000, refetchInterval: 3_000 }); const liveTokens = market.data?.tokens; const newFeed = trpc.market.newTokens.useQuery(undefined, { staleTime: 2_000, refetchInterval: 5_000 });
   const [items, setItems] = useState<LiveMarketItem[]>([]); const [pumpSeeds, setPumpSeeds] = useState<Awaited<ReturnType<typeof loadPumpPortalTokens>>>([]); const [filter, setFilter] = useState("ALL"); const [query, setQuery] = useState(""); const [account, setAccount] = useState<PaperAccount>(() => ({ cashUsd: 10_000, positions: [], realizedPnlUsd: 0, trades: [] })); const [amounts, setAmounts] = useState<Record<string, string>>({}); const [message, setMessage] = useState(""); const [refreshing, setRefreshing] = useState(false);
