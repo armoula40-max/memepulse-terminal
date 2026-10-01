@@ -10,7 +10,6 @@ permissions:
 
 env:
   CI: true
-  EXPO_PUBLIC_PUMPPORTAL_API_KEY: ${{ secrets.PUMPPORTAL_API_KEY }}
 
 jobs:
   build-apk:

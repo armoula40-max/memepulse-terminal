@@ -41,7 +41,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.2",
+  version: "1.0.3",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -50,9 +50,9 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    infoPlist: {
-      ITSAppUsesNonExemptEncryption: false,
-    },
+    "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
   },
   android: {
     adaptiveIcon: {
@@ -86,16 +86,12 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
-    "./scripts/with-pumpportal-service.js",
-    [
-      "expo-notifications",
-      { sounds: ["./assets/sounds/memepulse_signal.wav"] },
-    ],
+    "expo-background-task",
+    ["expo-notifications", { sounds: ["./assets/sounds/shopify_catch.wav"] }],
     [
       "expo-audio",
       {
-        microphonePermission:
-          "Allow $(PRODUCT_NAME) to access your microphone.",
+        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
       },
     ],
     [

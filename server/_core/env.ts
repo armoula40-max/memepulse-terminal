@@ -1,8 +1,3 @@
-import dotenv from "dotenv";
-
-dotenv.config({ path: ".env.local" });
-dotenv.config();
-
 export const ENV = {
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",
@@ -12,9 +7,7 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
-  geckoTerminalApiUrl:
-    process.env.GECKO_TERMINAL_API_URL ??
-    "https://api.geckoterminal.com/api/v2",
+  geckoTerminalApiUrl: process.env.GECKO_TERMINAL_API_URL ?? "https://api.geckoterminal.com/api/v2",
   geckoTerminalApiKey: process.env.GECKO_TERMINAL_API_KEY ?? "",
   pumpPortalApiKey: process.env.PUMPPORTAL_API_KEY ?? "",
 };
