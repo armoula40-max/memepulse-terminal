@@ -71,6 +71,7 @@ export async function pollWallet(wallet: TrackedWallet, knownSignatures: Set<str
   for (const row of fresh.reverse()) {
     try {
       const transaction = await rpc("getTransaction", [row.signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]);
+      if (!transaction) throw new Error("TX_NOT_AVAILABLE");
       activities.push(...parseWalletTransaction({ signature: row.signature, wallet, transaction, confirmationStatus: row.confirmationStatus ?? null }));
     } catch {
       activities.push({ id: `${wallet.id}:${row.signature}:pending`, walletId: wallet.id, walletName: wallet.name, signature: row.signature, mint: null, symbol: null, name: null, kind: "UNKNOWN", status: "PENDING", observedAt: new Date().toISOString(), confirmedAt: null, solDelta: null, tokenDelta: null, usdValue: null, note: "Transaction fetch pending or unavailable; retrying without a buy claim." });

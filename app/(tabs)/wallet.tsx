@@ -24,7 +24,7 @@ export default function WalletScreen() {
     let cancelled = false;
     const sync = async () => {
       if (!wallets.some((wallet) => wallet.enabled)) return;
-      const known = new Set(activities.map((activity) => activity.signature));
+      const known = new Set(activities.filter((activity) => activity.status !== "PENDING").map((activity) => activity.signature));
       for (const wallet of wallets.filter((item) => item.enabled)) {
         if (cancelled) return;
         setWallets((old) => old.map((item) => item.id === wallet.id ? { ...item, status: "RECONNECTING", error: null } : item));

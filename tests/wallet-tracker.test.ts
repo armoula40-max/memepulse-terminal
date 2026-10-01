@@ -7,6 +7,7 @@ describe("wallet tracker safety helpers", () => {
   it("accepts a public address and extracts it from a Photon portfolio URL", () => {
     expect(extractPublicSolanaAddress(address)).toBe(address);
     expect(extractPublicSolanaAddress(`https://photon-sol.tinyastro.io/en/p/${address}`)).toBe(address);
+    expect(extractPublicSolanaAddress(`https://photon-sol.tinyastro.io/en/portfolios/${address}`)).toBe(address);
     expect(extractPublicSolanaAddress("not-a-wallet")).toBeNull();
     expect(extractPublicSolanaAddress("https://example.com/" + address)).toBeNull();
   });
