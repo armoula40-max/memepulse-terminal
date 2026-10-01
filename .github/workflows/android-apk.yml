@@ -46,7 +46,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.1.12297006'
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --non-interactive
