@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -42,27 +44,177 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --non-interactive
 
+      - name: Confirm generated Gradle project retains the Android Debug signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle_file=android/app/build.gradle
+          test -s "$gradle_file"
+          if grep -Eq 'MEMEPULSE_RELEASE_SIGNING_CONFIG|validateMemepulseReleaseSigning' "$gradle_file"; then
+            echo "::error title=Unexpected production signing plugin::The debug test workflow must not require a production keystore."
+            exit 1
+          fi
+          grep -Fq 'signingConfig signingConfigs.debug' "$gradle_file"
+
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace --no-configuration-cache -x lintVitalAnalyzeRelease -x lintVitalRelease
+        run: ./gradlew clean assembleRelease --no-daemon --stacktrace --no-configuration-cache -x lintVitalAnalyzeRelease -x lintVitalRelease
 
-      - name: Rename APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk MemePulse-Terminal-release.apk
+      - name: Prepare debug-signed test APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk MemePulse-Terminal-debug-test.apk
+
+      - name: Verify APK signature, package, checksum, and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_path=android/app/build/outputs/apk/release/app-release.apk
+          artifact=MemePulse-Terminal-debug-test.apk
+          expected_package=com.app.meme.pulse.terminal
+          expected_cert_sha256=fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
+          if [[ ! -s "$apk_path" ]]; then
+            echo "::error title=Test APK missing::Gradle did not produce app-release.apk."
+            exit 1
+          fi
+          mapfile -t release_apks < <(find android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print | sort)
+          if [[ "${#release_apks[@]}" -ne 1 || "${release_apks[0]}" != "$apk_path" ]]; then
+            echo "::error title=Unexpected APK outputs::Expected exactly one standalone app-release.apk."
+            exit 1
+          fi
+
+          unzip -tq "$apk_path"
+          build_tools="$ANDROID_HOME/build-tools/35.0.0"
+          verify_log="$RUNNER_TEMP/memepulse-apksigner-verify.txt"
+          if ! "$build_tools/apksigner" verify --verbose --print-certs "$apk_path" > "$verify_log" 2>&1; then
+            echo "::error title=APK signature invalid::The APK did not pass apksigner verification."
+            cat "$verify_log"
+            exit 1
+          fi
+          grep -Eq '^Number of signers: [1-9][0-9]*$' "$verify_log"
+          certificate_dn="$(sed -n 's/^Signer #1 certificate DN: //p' "$verify_log" | head -n 1)"
+          actual_cert_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$verify_log" | head -n 1 | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$certificate_dn" != *"Android Debug"* || "$actual_cert_sha256" != "$expected_cert_sha256" ]]; then
+            echo "::error title=Unexpected APK signing certificate::The APK signer does not match the previously audited Android Debug certificate."
+            printf 'Observed certificate DN: %s\nObserved SHA-256: %s\n' "$certificate_dn" "$actual_cert_sha256"
+            exit 1
+          fi
+
+          expo_config="$(CI=1 npx expo config --type public --json)"
+          expected_version="$(printf '%s' "$expo_config" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')"
+          badging="$("$build_tools/aapt" dump badging "$apk_path")"
+          package_line="$(printf '%s\n' "$badging" | grep '^package:' | head -n 1)"
+          if [[ "$package_line" != *"name='${expected_package}'"* ]]; then
+            echo "::error title=APK package mismatch::Expected $expected_package."
+            printf '%s\n' "$package_line"
+            exit 1
+          fi
+          version_code="$(printf '%s' "$package_line" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")"
+          version_name="$(printf '%s' "$package_line" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
+          if [[ -z "$version_code" || "$version_name" != "$expected_version" ]]; then
+            echo "::error title=APK version mismatch::The APK version does not match the Expo configuration."
+            printf '%s\nExpected version: %s\n' "$package_line" "$expected_version"
+            exit 1
+          fi
+
+          min_sdk="$(printf '%s\n' "$badging" | awk -F "'" '/^sdkVersion:/ { print $2; exit }')"
+          target_sdk="$(printf '%s\n' "$badging" | awk -F "'" '/^targetSdkVersion:/ { print $2; exit }')"
+          abis="$(unzip -Z1 "$apk_path" | awk -F/ '$1 == "lib" && NF >= 3 { print $2 }' | sort -u | paste -sd, -)"
+          apk_sha256="$(sha256sum "$apk_path" | awk '{print $1}')"
+          printf '%s  %s\n' "$apk_sha256" "$artifact" > "$artifact.sha256"
+          (cd "$GITHUB_WORKSPACE" && sha256sum --check "$artifact.sha256")
+          cat > "$artifact.verification.txt" <<EOF
+          buildType=debug-signed-test
+          applicationId=${expected_package}
+          versionName=${version_name}
+          versionCode=${version_code}
+          signature=valid
+          signerCertificateDn=${certificate_dn}
+          signerCertificateSha256=${actual_cert_sha256}
+          apkSha256=${apk_sha256}
+          minSdk=${min_sdk}
+          targetSdk=${target_sdk}
+          abis=${abis}
+          EOF
+          echo "APK SHA-256: ${apk_sha256}"
+          echo "Signer certificate SHA-256: ${actual_cert_sha256}"
+          echo "applicationId=${expected_package} versionName=${version_name} versionCode=${version_code}"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MemePulse-Terminal-APK
-          path: MemePulse-Terminal-release.apk
+          name: MemePulse-Terminal-debug-test-APK
+          path: |
+            MemePulse-Terminal-debug-test.apk
+            MemePulse-Terminal-debug-test.apk.sha256
+            MemePulse-Terminal-debug-test.apk.verification.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Clean temporary build outputs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf android/app/build android/.gradle
+          rm -f "$RUNNER_TEMP/memepulse-apksigner-verify.txt"
+          rm -f MemePulse-Terminal-debug-test.apk MemePulse-Terminal-debug-test.apk.sha256 MemePulse-Terminal-debug-test.apk.verification.txt
+
+  publish-test-release:
+    name: Publish verified debug-signed test Release
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: build-apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: MemePulse-Terminal-debug-test-APK
+          path: release-assets
+
+      - name: Recheck checksum and verification metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          test -s MemePulse-Terminal-debug-test.apk
+          test -s MemePulse-Terminal-debug-test.apk.sha256
+          test -s MemePulse-Terminal-debug-test.apk.verification.txt
+          sha256sum --check MemePulse-Terminal-debug-test.apk.sha256
+          grep -Fxq 'buildType=debug-signed-test' MemePulse-Terminal-debug-test.apk.verification.txt
+          grep -Fxq 'applicationId=com.app.meme.pulse.terminal' MemePulse-Terminal-debug-test.apk.verification.txt
+          grep -Fxq 'signerCertificateSha256=fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c' MemePulse-Terminal-debug-test.apk.verification.txt
+          grep -Fxq 'signature=valid' MemePulse-Terminal-debug-test.apk.verification.txt
+
+      - name: Publish debug-signed test APK to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="apk-${GITHUB_RUN_ID}"
+          cat > release-notes.md <<'EOF'
+          **Debug-signed test build — not a production or Play Store release.**
+
+          This APK uses the previously audited Android Debug certificate. It is intended only for test distribution. It is not signed with a production keystore and is not claimed compatible with separately production-signed installations.
+
+          The release includes the APK, a SHA-256 checksum file, and non-secret verification metadata.
+          EOF
+          gh release create "$tag" \
+            release-assets/MemePulse-Terminal-debug-test.apk \
+            release-assets/MemePulse-Terminal-debug-test.apk.sha256 \
+            release-assets/MemePulse-Terminal-debug-test.apk.verification.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "MemePulse Android APK ${GITHUB_RUN_NUMBER} - DEBUG-SIGNED TEST BUILD" \
+            --notes-file release-notes.md \
+            --prerelease
