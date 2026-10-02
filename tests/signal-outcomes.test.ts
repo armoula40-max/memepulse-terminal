@@ -10,6 +10,18 @@ describe("signal outcomes", () => {
     expect(result.outcome).toBe("POST_SIGNAL_X10");
     expect(result.maxMultiple).toBe(10);
   });
+  it("marks a token FAILED_AFTER_SIGNAL after a sustained collapse", () => {
+    const first = point(60, 1);
+    const current = { ...point(1, 0.4), capturedAt: new Date(Date.now() - 1 * 60_000).toISOString() };
+    const result = classifySignalOutcome(first, [first, current]);
+    expect(result.outcome).toBe("FAILED_AFTER_SIGNAL");
+    expect(result.multiple).toBe(0.4);
+  });
+  it("marks a token failed when market cap collapses even if price data is noisy", () => {
+    const first = point(60, 1);
+    const current = { ...point(1, 0.9), marketCapUsd: 3_000, capturedAt: new Date(Date.now() - 1 * 60_000).toISOString() };
+    expect(classifySignalOutcome(first, [first, current]).outcome).toBe("FAILED_AFTER_SIGNAL");
+  });
   it("requires multiple safety and flow conditions for strict early flow", () => {
     expect(isStrictEarlyFlow({ ageMinutes: 8, liquidityUsd: 15_000, volume1hUsd: 1_000, change1hPct: 20, buys1h: 20, sells1h: 10, priceUsd: 0.001, marketCapUsd: 25_000 })).toBe(true);
     expect(isStrictEarlyFlow({ ageMinutes: 8, liquidityUsd: 1_000, volume1hUsd: 20_000, change1hPct: 500, buys1h: 500, sells1h: 20, priceUsd: 0.001, marketCapUsd: 25_000 })).toBe(false);

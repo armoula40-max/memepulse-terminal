@@ -19,7 +19,9 @@ export function classifySignalOutcome(first: SignalSnapshot | undefined, snapsho
   if (maxMultiple >= 10) return { outcome: "POST_SIGNAL_X10", multiple: Number(multiple.toFixed(3)), maxMultiple: Number(maxMultiple.toFixed(3)), drawdownPct };
   if (maxMultiple >= 5) return { outcome: "POST_SIGNAL_X5", multiple: Number(multiple.toFixed(3)), maxMultiple: Number(maxMultiple.toFixed(3)), drawdownPct };
   if (maxMultiple >= 2) return { outcome: "POST_SIGNAL_X2", multiple: Number(multiple.toFixed(3)), maxMultiple: Number(maxMultiple.toFixed(3)), drawdownPct };
-  if (ageMinutes >= 30 && (multiple <= 0.8 || (drawdownPct ?? 0) >= 40)) return { outcome: "FAILED_AFTER_SIGNAL", multiple: Number(multiple.toFixed(3)), maxMultiple: Number(maxMultiple.toFixed(3)), drawdownPct };
+  const currentMarketCap = valid.at(-1)?.marketCapUsd ?? first.marketCapUsd;
+  const marketCapCollapse = first.marketCapUsd > 0 && currentMarketCap / first.marketCapUsd <= 0.2;
+  if (ageMinutes >= 30 && (multiple <= 0.8 || (drawdownPct ?? 0) >= 40 || marketCapCollapse)) return { outcome: "FAILED_AFTER_SIGNAL", multiple: Number(multiple.toFixed(3)), maxMultiple: Number(maxMultiple.toFixed(3)), drawdownPct };
   return { outcome: ageMinutes >= 30 ? "NO_CONFIRMATION" : "PENDING", multiple: Number(multiple.toFixed(3)), maxMultiple: Number(maxMultiple.toFixed(3)), drawdownPct };
 }
 
