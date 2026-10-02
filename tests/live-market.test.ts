@@ -17,4 +17,5 @@ describe("Live Market historical report", () => {
     expect(report).toContain("3500");
     expect(report).toContain("observed_ath_multiple");
   });
+
 });

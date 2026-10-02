@@ -46,13 +46,14 @@ export async function captureLiveMarket(tokens: LiveMarketTokenInput[]) {
   const byAddress = new Map(current.map((item) => [item.address, item]));
   for (const token of tokens) {
     const ageMs = token.pairCreatedAt ? Date.now() - new Date(token.pairCreatedAt).getTime() : -1;
-    if (token.priceUsd === null || token.priceUsd <= 0 || token.marketCapUsd <= 0 || token.liquidityUsd <= 0 || token.volume1hUsd <= 0 || ageMs < 0 || ageMs > 5 * 60_000) continue;
     const previous = byAddress.get(token.address);
+    if (token.priceUsd === null || token.priceUsd <= 0 || token.marketCapUsd <= 0 || token.liquidityUsd <= 0 || token.volume1hUsd <= 0 || ageMs < 0 || (!previous && ageMs > 5 * 60_000)) continue;
     const capturedAt = new Date().toISOString();
     const ageMinutes = token.pairCreatedAt ? Math.max(0, (Date.now() - new Date(token.pairCreatedAt).getTime()) / 60_000) : 99999;
     const strictEarly = isStrictEarlyFlow({ ageMinutes, liquidityUsd: token.liquidityUsd, volume1hUsd: token.volume1hUsd, change1hPct: token.change1hPct, buys1h: token.buys1h, sells1h: token.sells1h, priceUsd: token.priceUsd, marketCapUsd: token.marketCapUsd });
     const change = token.change24hPct;
-    const signal: LiveMarketItem["signal"] = change >= 10_000 ? "X100_CANDIDATE" : change >= 900 ? "X10_CANDIDATE" : token.liquidityUsd < 5_000 || token.change1hPct < -25 ? "RISK" : strictEarly ? "EARLY_FLOW" : "MOMENTUM";
+    const detectedSignal: LiveMarketItem["signal"] = change >= 10_000 ? "X100_CANDIDATE" : change >= 900 ? "X10_CANDIDATE" : token.liquidityUsd < 5_000 || token.change1hPct < -25 ? "RISK" : strictEarly ? "EARLY_FLOW" : "MOMENTUM";
+    const signal = previous?.signal ?? detectedSignal;
     const snapshot: SignalSnapshot = { capturedAt, priceUsd: token.priceUsd, marketCapUsd: token.marketCapUsd, liquidityUsd: token.liquidityUsd, change1hPct: token.change1hPct, change24hPct: token.change24hPct, buys1h: token.buys1h, sells1h: token.sells1h };
     const snapshots = [...(previous?.snapshots ?? []), snapshot].slice(-240);
     // Legacy records did not contain snapshots. Start their measurement at the first
