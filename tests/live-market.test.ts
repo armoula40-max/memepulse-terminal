@@ -16,6 +16,9 @@ describe("Live Market historical report", () => {
     expect(report).toContain("pre_signal_reported_24h_pump_pct");
     expect(report).toContain("3500");
     expect(report).toContain("observed_ath_multiple");
+    expect(report).toContain("token_created_at");
+    expect(report).toContain("first_signal_at");
+    expect(report).toContain("last_captured_at");
   });
 
 });
