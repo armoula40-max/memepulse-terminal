@@ -49,7 +49,7 @@ export async function captureLiveMarket(tokens: LiveMarketTokenInput[]) {
   for (const token of tokens) {
     const ageMs = token.pairCreatedAt ? Date.now() - new Date(token.pairCreatedAt).getTime() : -1;
     const previous = byAddress.get(token.address);
-    if (token.priceUsd === null || token.priceUsd <= 0 || token.marketCapUsd <= 0 || ageMs < 0 || (!previous && (token.liquidityUsd <= 0 || token.volume1hUsd <= 0 || ageMs > 5 * 60_000))) continue;
+    if (token.priceUsd === null || token.priceUsd <= 0 || token.marketCapUsd <= 0 || ageMs < 0) continue;
     const capturedAt = new Date().toISOString();
     const ageMinutes = token.pairCreatedAt ? Math.max(0, (Date.now() - new Date(token.pairCreatedAt).getTime()) / 60_000) : 99999;
     const strictEarly = isStrictEarlyFlow({ ageMinutes, liquidityUsd: token.liquidityUsd, volume1hUsd: token.volume1hUsd, change1hPct: token.change1hPct, buys1h: token.buys1h, sells1h: token.sells1h, priceUsd: token.priceUsd, marketCapUsd: token.marketCapUsd });

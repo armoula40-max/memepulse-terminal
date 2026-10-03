@@ -18,6 +18,16 @@ const ENRICH_CONCURRENCY = 4;
 const RETRY_AFTER_MS = 15_000;
 const DEX_TOKEN_URL = "https://api.dexscreener.com/latest/dex/tokens/";
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type PumpPortalTokenSeed = {
   address: string;
   symbol: string;
@@ -105,7 +115,7 @@ function notifyQualified(token: PumpPortalTokenSeed) {
 async function enrich(seed: any) {
   const address = String(seed.mint);
   try {
-    const response = await fetch(`${DEX_TOKEN_URL}${encodeURIComponent(address)}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(6_000) });
+    const response = await fetchWithTimeout(`${DEX_TOKEN_URL}${encodeURIComponent(address)}`, { headers: { Accept: "application/json" } }, 6_000);
     if (!response.ok) return false;
     const payload = await response.json() as { pairs?: Pair[] };
     const pair = (payload.pairs ?? []).find((item) => item.chainId === "solana" && item.baseToken?.address === address) ?? payload.pairs?.find((item) => item.chainId === "solana");
