@@ -5,7 +5,7 @@ import { useFocusEffect } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import { executePaperOrder, loadPaperAccount, savePaperAccount, type PaperAccount } from "@/lib/paper-ledger";
-import { assessProToken, formatAgeHours, type ProTokenInput } from "@/lib/pro-strategy";
+import { assessProToken, classifyProVenue, formatAgeHours, venueLabel, type ProTokenInput } from "@/lib/pro-strategy";
 import { openTokenLink } from "@/lib/token-links";
 
 const C = { bg: "#07111F", surface: "#0D1B2A", border: "#1D3852", text: "#F4F8FC", muted: "#8FA6BC", mint: "#23E6A0", amber: "#F6C667", red: "#FF7180", blue: "#59D6FF" };
@@ -19,7 +19,7 @@ export default function ProScreen() {
   useFocusEffect(() => { let active = true; void loadPaperAccount().then((saved) => { if (active) setAccount(saved); }); return () => { active = false; }; });
 
   const assessments = useMemo(() => (market.data?.tokens ?? []).map((token) => {
-    const input: ProTokenInput = { address: token.address, symbol: token.symbol, name: token.name, priceUsd: token.priceUsd, marketCapUsd: token.marketCapUsd, liquidityUsd: token.liquidityUsd, volume1hUsd: token.volume1hUsd, volume24hUsd: token.volume24hUsd, change1hPct: token.change1hPct, change24hPct: token.change24hPct, buys1h: token.buys1h, sells1h: token.sells1h, pairCreatedAt: token.pairCreatedAt, observedAt: token.observedAt };
+    const input: ProTokenInput = { address: token.address, symbol: token.symbol, name: token.name, priceUsd: token.priceUsd, marketCapUsd: token.marketCapUsd, liquidityUsd: token.liquidityUsd, volume1hUsd: token.volume1hUsd, volume24hUsd: token.volume24hUsd, change1hPct: token.change1hPct, change24hPct: token.change24hPct, buys1h: token.buys1h, sells1h: token.sells1h, pairCreatedAt: token.pairCreatedAt, venue: classifyProVenue(token.dexId, token.address, token.pairCreatedAt), observedAt: token.observedAt };
     return { token, assessment: assessProToken(input, account.cashUsd) };
   }).sort((a, b) => b.assessment.score - a.assessment.score).slice(0, 30), [market.data?.tokens, account.cashUsd]);
   const eligible = assessments.filter((item) => item.assessment.decision === "ENTER").length;
@@ -42,19 +42,19 @@ export default function ProScreen() {
     <View style={styles.titleRow}><View><Text style={styles.title}>Pro</Text><Text style={styles.subtitle}>بوابات أمان + تأكيد متعدد المصادر + دخول ورقي متدرج</Text></View><View style={styles.badge}><MaterialIcons name="verified" size={15} color={C.mint} /><Text style={styles.badgeText}>NO LEVERAGE</Text></View></View>
     <View style={styles.notice}><MaterialIcons name="info-outline" size={17} color={C.amber} /><Text style={styles.noticeText}>هذه خوارزمية بحث ومحاكاة، وليست توصية استثمارية. لا توجد صفقات حقيقية أو ضمان للربح.</Text></View>
     <View style={styles.metrics}><Metric label="CASH" value={`$${account.cashUsd.toFixed(0)}`} /><Metric label="ELIGIBLE" value={String(eligible)} /><Metric label="WATCHLIST" value={String(assessments.length)} /></View>
-    <View style={styles.method}><Text style={styles.sectionTitle}>PRO METHOD</Text><Text style={styles.methodText}>يُمنع شراء عملة ممتدة، أو ذات بيانات ناقصة، أو سيولة ضعيفة. الدخول المؤهل يستخدم أول شريحة فقط، مع إبطال عند -10% وأهداف 1.15x و1.25x. لا يوجد توسيط للخسارة.</Text></View>
+    <View style={styles.method}><Text style={styles.sectionTitle}>SOLANA MEME METHOD</Text><Text style={styles.methodText}>يبدأ الفحص من Pump.fun curve ثم يعيد التحقق بعد migration إلى Raydium أو PumpSwap. لا دخول آلي من curve غير مؤكدة، ولا شراء أثناء فجوة الترحيل أو عند bundle/holder risk. الدخول الورقي spot فقط وبالشريحة الأولى.</Text></View>
     {market.error ? <Text style={styles.error}>Market data unavailable: {market.error.message}</Text> : null}
     {message ? <Text style={styles.message}>{message}</Text> : null}
     <Text style={styles.section}>RANKED OPPORTUNITIES</Text>
     {assessments.map(({ token, assessment }) => <View key={token.address} style={styles.card}>
-      <Pressable onPress={() => void openTokenLink(token.address, "photon")} style={styles.cardTop}><View style={{ flex: 1 }}><Text style={styles.symbol}>${token.symbol}</Text><Text style={styles.name}>{token.name}</Text><Text style={styles.meta}>{token.pairCreatedAt ? `Age ${formatAgeHours(assessment.ageHours)}` : "Age UNKNOWN"} · ${Math.round(token.marketCapUsd).toLocaleString()} MC</Text></View><View style={styles.scoreBox}><Text style={styles.score}>{assessment.score}</Text><Text style={styles.scoreLabel}>{assessment.decision}</Text></View></Pressable>
+      <Pressable onPress={() => void openTokenLink(token.address, "photon")} style={styles.cardTop}><View style={{ flex: 1 }}><Text style={styles.symbol}>${token.symbol}</Text><Text style={styles.name}>{token.name}</Text><Text style={styles.meta}>{venueLabel(assessment.venue)} · {token.pairCreatedAt ? `Age ${formatAgeHours(assessment.ageHours)}` : "Age UNKNOWN"} · ${Math.round(token.marketCapUsd).toLocaleString()} MC</Text></View><View style={styles.scoreBox}><Text style={styles.score}>{assessment.score}</Text><Text style={styles.scoreLabel}>{assessment.decision}</Text></View></Pressable>
       <View style={styles.stats}><Stat label="Price" value={formatPrice(token.priceUsd)} /><Stat label="Liquidity" value={`$${Math.round(token.liquidityUsd).toLocaleString()}`} /><Stat label="1H" value={`${token.change1hPct.toFixed(1)}%`} /><Stat label="Buy/Sell" value={`${token.buys1h}/${token.sells1h}`} /></View>
       <Text style={styles.reason}>{assessment.reasons.slice(0, 3).join(" · ") || "لا توجد أسباب كافية للدخول"}</Text>
       {assessment.warnings.length ? <Text style={styles.warning}>{assessment.warnings.slice(0, 2).join(" · ")}</Text> : null}
       <View style={styles.levels}><Text style={styles.level}>Invalidation {formatPrice(assessment.invalidationPriceUsd)}</Text><Text style={styles.level}>T1 {formatPrice(assessment.targetOnePriceUsd)}</Text><Text style={styles.level}>T2 {formatPrice(assessment.targetTwoPriceUsd)}</Text></View>
       <View style={styles.actions}><Pressable onPress={() => void openTokenLink(token.address, "photon")} style={styles.marketButton}><Text style={styles.marketText}>PHOTON</Text></Pressable><Pressable disabled={assessment.decision === "REJECT" || busy === token.address} onPress={() => void enterPaper(token, assessment.firstTrancheUsd)} style={[styles.enterButton, assessment.decision !== "ENTER" && styles.disabled]}><Text style={styles.enterText}>{busy === token.address ? "OPENING…" : assessment.decision === "ENTER" ? `PAPER ENTER $${assessment.firstTrancheUsd.toFixed(0)}` : assessment.decision === "WATCH" ? `MANUAL PAPER $${assessment.firstTrancheUsd.toFixed(0)}` : "REJECTED"}</Text></Pressable></View>
     </View>)}
-    {!assessments.length ? <Text style={styles.empty}>لا توجد بيانات سوق حالية. ستظهر هنا عند وصول بيانات DexScreener.</Text> : null}
+    {!assessments.length ? <Text style={styles.empty}>لا توجد بيانات Pump.fun أو Raydium أو PumpSwap حالية. ستظهر هنا عند وصول بيانات DexScreener.</Text> : null}
   </ScrollView></ScreenContainer>;
 }
 function Metric({ label, value }: { label: string; value: string }) { return <View style={styles.metric}><Text style={styles.metricLabel}>{label}</Text><Text style={styles.metricValue}>{value}</Text></View>; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessProToken } from "../lib/pro-strategy";
+import { assessProToken, classifyProVenue } from "../lib/pro-strategy";
 
 const base = {
   address: "4vw54BmAogeRV3vPKWyFet5yf8DTLcREzdSzx4rw9Ud9",
@@ -15,6 +15,7 @@ const base = {
   buys1h: 120,
   sells1h: 80,
   pairCreatedAt: new Date(Date.now() - 100 * 3_600_000).toISOString(),
+  venue: "PUMPSWAP" as const,
 };
 
 describe("Pro strategy", () => {
@@ -28,10 +29,10 @@ describe("Pro strategy", () => {
   });
 
   it("keeps a new token on watch even when its market metrics are strong", () => {
-    const result = assessProToken({ ...base, pairCreatedAt: new Date(Date.now() - 12 * 3_600_000).toISOString() }, 10_000);
+    const result = assessProToken({ ...base, pairCreatedAt: new Date(Date.now() - 10 * 60_000).toISOString() }, 10_000);
     expect(result.decision).toBe("WATCH");
     expect(result.gates.age).toBe(false);
-    expect(result.warnings.some((warning) => warning.includes("72"))).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("30"))).toBe(true);
   });
 
   it("rejects a chased move and weak flow", () => {
@@ -39,5 +40,17 @@ describe("Pro strategy", () => {
     expect(result.decision).toBe("REJECT");
     expect(result.gates.chase).toBe(false);
     expect(result.gates.flow).toBe(false);
+  });
+
+  it("rejects an unrelated DEX instead of treating it as a Solana meme venue", () => {
+    const result = assessProToken({ ...base, venue: "OTHER" }, 10_000);
+    expect(result.decision).toBe("REJECT");
+    expect(result.gates.venue).toBe(false);
+  });
+
+  it("classifies current and historical venue labels explicitly", () => {
+    expect(classifyProVenue("raydium", base.address, base.pairCreatedAt)).toBe("RAYDIUM");
+    expect(classifyProVenue("pumpswap", base.address, base.pairCreatedAt)).toBe("PUMPSWAP");
+    expect(classifyProVenue("unknown", `${base.address.slice(0, -4)}pump`, base.pairCreatedAt)).toBe("PUMP_FUN_CURVE");
   });
 });
