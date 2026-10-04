@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import { useFocusEffect } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import { executePaperOrder, loadPaperAccount, savePaperAccount, type PaperAccount } from "@/lib/paper-ledger";
 import { loadPumpPortalTokens, startPumpPortalLiveStream, stopPumpPortalLiveStream } from "@/lib/pumpportal-live";
+import { enableLocalMarketMonitoring } from "@/lib/local-background-monitor";
 import { assessProToken, classifyProVenue, formatAgeHours, PRO_MAX_AGE_MINUTES, venueLabel, type ProTokenInput } from "@/lib/pro-strategy";
 import { openTokenLink } from "@/lib/token-links";
 
@@ -16,6 +18,7 @@ export default function ProScreen() {
   const [account, setAccount] = useState<PaperAccount>(() => ({ cashUsd: 10_000, positions: [], realizedPnlUsd: 0, trades: [] }));
   const [localTokens, setLocalTokens] = useState<Awaited<ReturnType<typeof loadPumpPortalTokens>>>([]);
   const [localStreamReady, setLocalStreamReady] = useState(false);
+  const [notificationsReady, setNotificationsReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
@@ -26,6 +29,11 @@ export default function ProScreen() {
     void loadPumpPortalTokens().then((tokens) => { if (active) setLocalTokens(tokens); });
     const timer = setInterval(() => { void loadPumpPortalTokens().then((tokens) => { if (active) setLocalTokens(tokens); }); }, 5_000);
     return () => { active = false; clearInterval(timer); stopPumpPortalLiveStream(); };
+  }, []);
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    void Notifications.requestPermissionsAsync().then((permission) => setNotificationsReady(permission.granted));
+    void enableLocalMarketMonitoring().then(() => setNotificationsReady(true)).catch(() => setNotificationsReady(false));
   }, []);
   useFocusEffect(() => { let active = true; void loadPaperAccount().then((saved) => { if (active) setAccount(saved); }); return () => { active = false; }; });
 
@@ -78,7 +86,7 @@ export default function ProScreen() {
     <View style={styles.notice}><MaterialIcons name="bolt" size={17} color={C.amber} /><Text style={styles.noticeText}>محرك Pro يراقب إطلاقات PumpPortal الجديدة، يرتبها، ويفتح Paper Trading لاختبار الدخول والسيولة وإدارة المخاطر. التداول الحقيقي معطل عمدًا في هذا الإصدار.</Text></View>
     <View style={styles.metrics}><Metric label="CASH" value={`$${account.cashUsd.toFixed(0)}`} /><Metric label="ELIGIBLE" value={String(eligible)} /><Metric label="WATCHLIST" value={String(assessments.length)} /></View>
     <View style={styles.method}><Text style={styles.sectionTitle}>SOLANA NEW-LAUNCH METHOD</Text><Text style={styles.methodText}>هذه الصفحة تعزل الأزواج الجديدة فقط خلال أول {PRO_MAX_AGE_MINUTES} دقائق من وقت إنشاء الزوج. تبدأ المراقبة من Pump.fun curve، ثم لا تُقبل إلا بعد ظهور Raydium أو PumpSwap. لا توجد صفقات حقيقية، ولا ندّعي أن DexScreener وحده يثبت حرق السيولة أو إلغاء mint أو غياب bundle.</Text></View>
-    <View style={styles.refreshRow}><Text style={styles.stream}>{newFeed.data?.stream.connected ? "PUMPPORTAL SERVER · CONNECTED" : localStreamReady ? "PUMPPORTAL LOCAL KEY · READY" : newFeed.data?.stream.configured ? "PUMPPORTAL SERVER · RECONNECTING" : "PUMPPORTAL SERVER · NOT CONFIGURED"}{newFeed.data?.observedAt ? ` · ${new Date(newFeed.data.observedAt).toLocaleTimeString()}` : ""}</Text><Pressable onPress={() => void refreshNow()} disabled={refreshing} style={[styles.refreshButton, refreshing && styles.disabled]}><MaterialIcons name="refresh" size={15} color={C.bg} /><Text style={styles.refreshText}>{refreshing ? "REFRESHING" : "REFRESH"}</Text></Pressable></View>
+    <View style={styles.refreshRow}><Text style={styles.stream}>{newFeed.data?.stream.connected ? "PUMPPORTAL SERVER · CONNECTED" : localStreamReady ? "PUMPPORTAL LOCAL KEY · READY" : newFeed.data?.stream.configured ? "PUMPPORTAL SERVER · RECONNECTING" : "PUMPPORTAL SERVER · NOT CONFIGURED"}{notificationsReady ? " · PRO ALERTS ON" : " · ALERT PERMISSION REQUIRED"}</Text><Pressable onPress={() => void refreshNow()} disabled={refreshing} style={[styles.refreshButton, refreshing && styles.disabled]}><MaterialIcons name="refresh" size={15} color={C.bg} /><Text style={styles.refreshText}>{refreshing ? "REFRESHING" : "REFRESH"}</Text></Pressable></View>
     {newFeed.error ? <Text style={styles.error}>PumpPortal feed unavailable: {newFeed.error.message}</Text> : null}
     {message ? <Text style={styles.message}>{message}</Text> : null}
     <Text style={styles.section}>NEW LAUNCHES · {PRO_MAX_AGE_MINUTES} MINUTE WINDOW</Text>

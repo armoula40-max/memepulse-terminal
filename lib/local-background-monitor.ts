@@ -26,8 +26,13 @@ async function inspectPumpPortal(key: string) {
       try {
         const item = JSON.parse(String(message.data ?? "{}"));
         if (item.txType !== "create" || !item.mint) return;
+        const seen = new Set(JSON.parse((await AsyncStorage.getItem(SEEN_KEY)) ?? "[]") as string[]);
+        const address = String(item.mint);
+        if (seen.has(`pumpportal:${address}`)) return;
+        seen.add(`pumpportal:${address}`);
+        await AsyncStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen).slice(-500)));
         count += 1;
-        await Notifications.scheduleNotificationAsync({ content: { title: `PumpPortal catch: $${item.symbol ?? "TOKEN"}`, body: `New Solana token · initial buy ${item.initialBuy ?? "—"} · tap to inspect`, data: { address: String(item.mint) }, sound: "shopify_catch.wav" }, trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, repeats: false, channelId: "meme-catch-v2" } });
+        await Notifications.scheduleNotificationAsync({ content: { title: `PRO CATCH · $${item.symbol ?? "TOKEN"}`, body: `PumpPortal launch · initial buy ${item.initialBuy ?? "—"} · tap to inspect`, data: { address }, sound: "shopify_catch.wav" }, trigger: null });
       } catch {}
     };
     socket.onerror = () => { clearTimeout(timer); resolve(count); };
@@ -57,7 +62,7 @@ async function inspectMarket() {
     if (score < 55 || seen.has(key)) continue;
     seen.add(key);
     notifications += 1;
-    await Notifications.scheduleNotificationAsync({ content: { title: `MemePulse catch: $${pair.baseToken.symbol ?? "TOKEN"}`, body: `Score ${score}/100 · price $${pair.priceUsd ?? "—"} · liquidity $${Math.round(liquidity).toLocaleString()}`, data: { address }, sound: "shopify_catch.wav" }, trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, repeats: false, channelId: "meme-catch-v2" } });
+    await Notifications.scheduleNotificationAsync({ content: { title: `PRO CATCH · $${pair.baseToken.symbol ?? "TOKEN"}`, body: `Score ${score}/100 · price $${pair.priceUsd ?? "—"} · liquidity $${Math.round(liquidity).toLocaleString()}`, data: { address }, sound: "shopify_catch.wav" }, trigger: null });
   }
   await AsyncStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen).slice(-500)));
   return notifications;

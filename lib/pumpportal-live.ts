@@ -17,6 +17,7 @@ const MAX_TOKEN_AGE_MS = 5 * 60_000;
 const ENRICH_CONCURRENCY = 4;
 const RETRY_AFTER_MS = 15_000;
 const DEX_TOKEN_URL = "https://api.dexscreener.com/latest/dex/tokens/";
+const NOTIFIED_KEY = "memepulse.pumpportal.notified.v1";
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
@@ -105,10 +106,14 @@ async function saveQualified(token: PumpPortalTokenSeed) {
   await AsyncStorage.setItem(TOKENS_KEY, JSON.stringify(next));
 }
 
-function notifyQualified(token: PumpPortalTokenSeed) {
-  void Notifications.scheduleNotificationAsync({
-    content: { title: `Qualified launch: $${token.symbol}`, body: `MC $${Math.round(token.marketCapUsd).toLocaleString()} · volume $${Math.round(token.volume1hUsd).toLocaleString()} · buys ${token.buys1h} / sells ${token.sells1h}`, data: { address: token.address }, sound: "shopify_catch.wav" },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, repeats: false, channelId: "meme-catch-v2" },
+async function notifyQualified(token: PumpPortalTokenSeed) {
+  const notified = new Set(JSON.parse((await AsyncStorage.getItem(NOTIFIED_KEY)) ?? "[]") as string[]);
+  if (notified.has(token.address)) return;
+  notified.add(token.address);
+  await AsyncStorage.setItem(NOTIFIED_KEY, JSON.stringify(Array.from(notified).slice(-500)));
+  await Notifications.scheduleNotificationAsync({
+    content: { title: `PRO CATCH · $${token.symbol}`, body: `Qualified launch · MC $${Math.round(token.marketCapUsd).toLocaleString()} · volume $${Math.round(token.volume1hUsd).toLocaleString()}`, data: { address: token.address }, sound: "shopify_catch.wav" },
+    trigger: null,
   });
 }
 
@@ -122,7 +127,7 @@ async function enrich(seed: any) {
     const token = pair ? complete(pair, seed) : null;
     if (!token) return false;
     await saveQualified(token);
-    notifyQualified(token);
+    void notifyQualified(token);
     return true;
   } catch {
     return false;
