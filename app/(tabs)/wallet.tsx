@@ -5,7 +5,7 @@ import { useFocusEffect } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import { executePaperOrder, loadPaperAccount, savePaperAccount, type PaperAccount } from "@/lib/paper-ledger";
-import { assessProToken, classifyProVenue, formatAgeHours, venueLabel, type ProTokenInput } from "@/lib/pro-strategy";
+import { assessProToken, classifyProVenue, formatAgeHours, PRO_MAX_AGE_MINUTES, venueLabel, type ProTokenInput } from "@/lib/pro-strategy";
 import { openTokenLink } from "@/lib/token-links";
 
 const C = { bg: "#07111F", surface: "#0D1B2A", border: "#1D3852", text: "#F4F8FC", muted: "#8FA6BC", mint: "#23E6A0", amber: "#F6C667", red: "#FF7180", blue: "#59D6FF" };
@@ -21,7 +21,10 @@ export default function ProScreen() {
   const assessments = useMemo(() => (market.data?.tokens ?? []).map((token) => {
     const input: ProTokenInput = { address: token.address, symbol: token.symbol, name: token.name, priceUsd: token.priceUsd, marketCapUsd: token.marketCapUsd, liquidityUsd: token.liquidityUsd, volume1hUsd: token.volume1hUsd, volume24hUsd: token.volume24hUsd, change1hPct: token.change1hPct, change24hPct: token.change24hPct, buys1h: token.buys1h, sells1h: token.sells1h, pairCreatedAt: token.pairCreatedAt, venue: classifyProVenue(token.dexId, token.address, token.pairCreatedAt), observedAt: token.observedAt };
     return { token, assessment: assessProToken(input, account.cashUsd) };
-  }).sort((a, b) => b.assessment.score - a.assessment.score).slice(0, 30), [market.data?.tokens, account.cashUsd]);
+  }).filter(({ assessment }) => assessment.ageHours !== null && assessment.ageHours <= PRO_MAX_AGE_MINUTES / 60).sort((a, b) => {
+    const ageDelta = (a.assessment.ageHours ?? Number.POSITIVE_INFINITY) - (b.assessment.ageHours ?? Number.POSITIVE_INFINITY);
+    return ageDelta || b.assessment.score - a.assessment.score;
+  }).slice(0, 30), [market.data?.tokens, account.cashUsd]);
   const eligible = assessments.filter((item) => item.assessment.decision === "ENTER").length;
 
   const enterPaper = async (token: ProTokenInput, notionalUsd: number) => {
@@ -38,14 +41,14 @@ export default function ProScreen() {
   };
 
   return <ScreenContainer className="px-5" containerClassName="bg-background"><ScrollView contentContainerStyle={styles.content}>
-    <Text style={styles.kicker}>RESEARCH-DRIVEN PAPER DESK</Text>
+    <Text style={styles.kicker}>NEW LAUNCH PAPER DESK · 0–{PRO_MAX_AGE_MINUTES} MIN</Text>
     <View style={styles.titleRow}><View><Text style={styles.title}>Pro</Text><Text style={styles.subtitle}>بوابات أمان + تأكيد متعدد المصادر + دخول ورقي متدرج</Text></View><View style={styles.badge}><MaterialIcons name="verified" size={15} color={C.mint} /><Text style={styles.badgeText}>NO LEVERAGE</Text></View></View>
     <View style={styles.notice}><MaterialIcons name="info-outline" size={17} color={C.amber} /><Text style={styles.noticeText}>هذه خوارزمية بحث ومحاكاة، وليست توصية استثمارية. لا توجد صفقات حقيقية أو ضمان للربح.</Text></View>
     <View style={styles.metrics}><Metric label="CASH" value={`$${account.cashUsd.toFixed(0)}`} /><Metric label="ELIGIBLE" value={String(eligible)} /><Metric label="WATCHLIST" value={String(assessments.length)} /></View>
-    <View style={styles.method}><Text style={styles.sectionTitle}>SOLANA MEME METHOD</Text><Text style={styles.methodText}>يبدأ الفحص من Pump.fun curve ثم يعيد التحقق بعد migration إلى Raydium أو PumpSwap. لا دخول آلي من curve غير مؤكدة، ولا شراء أثناء فجوة الترحيل أو عند bundle/holder risk. الدخول الورقي spot فقط وبالشريحة الأولى.</Text></View>
+    <View style={styles.method}><Text style={styles.sectionTitle}>SOLANA NEW-LAUNCH METHOD</Text><Text style={styles.methodText}>هذه الصفحة تعزل الأزواج الجديدة فقط خلال أول {PRO_MAX_AGE_MINUTES} دقائق من وقت إنشاء الزوج. تبدأ المراقبة من Pump.fun curve، ثم لا تُقبل إلا بعد ظهور Raydium أو PumpSwap. لا توجد صفقات حقيقية، ولا ندّعي أن DexScreener وحده يثبت حرق السيولة أو إلغاء mint أو غياب bundle.</Text></View>
     {market.error ? <Text style={styles.error}>Market data unavailable: {market.error.message}</Text> : null}
     {message ? <Text style={styles.message}>{message}</Text> : null}
-    <Text style={styles.section}>RANKED OPPORTUNITIES</Text>
+    <Text style={styles.section}>NEW LAUNCHES · {PRO_MAX_AGE_MINUTES} MINUTE WINDOW</Text>
     {assessments.map(({ token, assessment }) => <View key={token.address} style={styles.card}>
       <Pressable onPress={() => void openTokenLink(token.address, "photon")} style={styles.cardTop}><View style={{ flex: 1 }}><Text style={styles.symbol}>${token.symbol}</Text><Text style={styles.name}>{token.name}</Text><Text style={styles.meta}>{venueLabel(assessment.venue)} · {token.pairCreatedAt ? `Age ${formatAgeHours(assessment.ageHours)}` : "Age UNKNOWN"} · ${Math.round(token.marketCapUsd).toLocaleString()} MC</Text></View><View style={styles.scoreBox}><Text style={styles.score}>{assessment.score}</Text><Text style={styles.scoreLabel}>{assessment.decision}</Text></View></Pressable>
       <View style={styles.stats}><Stat label="Price" value={formatPrice(token.priceUsd)} /><Stat label="Liquidity" value={`$${Math.round(token.liquidityUsd).toLocaleString()}`} /><Stat label="1H" value={`${token.change1hPct.toFixed(1)}%`} /><Stat label="Buy/Sell" value={`${token.buys1h}/${token.sells1h}`} /></View>
@@ -54,7 +57,7 @@ export default function ProScreen() {
       <View style={styles.levels}><Text style={styles.level}>Invalidation {formatPrice(assessment.invalidationPriceUsd)}</Text><Text style={styles.level}>T1 {formatPrice(assessment.targetOnePriceUsd)}</Text><Text style={styles.level}>T2 {formatPrice(assessment.targetTwoPriceUsd)}</Text></View>
       <View style={styles.actions}><Pressable onPress={() => void openTokenLink(token.address, "photon")} style={styles.marketButton}><Text style={styles.marketText}>PHOTON</Text></Pressable><Pressable disabled={assessment.decision === "REJECT" || busy === token.address} onPress={() => void enterPaper(token, assessment.firstTrancheUsd)} style={[styles.enterButton, assessment.decision !== "ENTER" && styles.disabled]}><Text style={styles.enterText}>{busy === token.address ? "OPENING…" : assessment.decision === "ENTER" ? `PAPER ENTER $${assessment.firstTrancheUsd.toFixed(0)}` : assessment.decision === "WATCH" ? `MANUAL PAPER $${assessment.firstTrancheUsd.toFixed(0)}` : "REJECTED"}</Text></Pressable></View>
     </View>)}
-    {!assessments.length ? <Text style={styles.empty}>لا توجد بيانات Pump.fun أو Raydium أو PumpSwap حالية. ستظهر هنا عند وصول بيانات DexScreener.</Text> : null}
+    {!assessments.length ? <Text style={styles.empty}>لا توجد عملات جديدة ضمن نافذة 0–{PRO_MAX_AGE_MINUTES} دقائق حاليًا. العملات الأقدم تُستبعد عمدًا من صفحة Pro.</Text> : null}
   </ScrollView></ScreenContainer>;
 }
 function Metric({ label, value }: { label: string; value: string }) { return <View style={styles.metric}><Text style={styles.metricLabel}>{label}</Text><Text style={styles.metricValue}>{value}</Text></View>; }

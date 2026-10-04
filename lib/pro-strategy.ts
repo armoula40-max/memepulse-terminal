@@ -40,6 +40,7 @@ const MIN_CURVE_LIQUIDITY_USD = 5_000;
 const MIN_AMM_LIQUIDITY_USD = 50_000;
 const MIN_VOLUME_1H_USD = 5_000;
 const MAX_FIRST_TRANCHE_PCT = 0.025;
+export const PRO_MAX_AGE_MINUTES = 7;
 const RAYDIUM_CUTOFF = Date.parse("2025-03-20T00:00:00.000Z");
 
 export function classifyProVenue(dexId: string | undefined, address: string, pairCreatedAt: string | null): ProVenue {
@@ -68,7 +69,7 @@ export function assessProToken(token: ProTokenInput, cashUsd = 10_000): ProAsses
   const chase = token.change24hPct <= MAX_DAILY_MOVE && token.change1hPct <= 15;
   const buySellRatio = token.sells1h > 0 ? token.buys1h / token.sells1h : token.buys1h > 0 ? 2 : 0;
   const flow = buySellRatio >= 1.05 && token.volume1hUsd >= MIN_VOLUME_1H_USD && token.buys1h >= 10;
-  const age = ageHours !== null && ageHours >= 0.5;
+  const age = ageHours !== null && ageHours >= 0 && ageHours <= PRO_MAX_AGE_MINUTES / 60;
   // DexScreener alone cannot prove a Pump.fun curve completion/migration signature.
   const migration = venue === "PUMP_FUN_CURVE" ? false : venue === "RAYDIUM" || venue === "PUMPSWAP";
   const reasons: string[] = [];
@@ -95,7 +96,7 @@ export function assessProToken(token: ProTokenInput, cashUsd = 10_000): ProAsses
   if (token.change24hPct >= 0 && token.change24hPct <= MAX_DAILY_MOVE) { score += 5; reasons.push("الأداء اليومي داخل نطاق غير مطارد"); }
   else if (token.change24hPct > MAX_DAILY_MOVE) warnings.push("تغير 24 ساعة يتجاوز حد المطاردة");
   if (data) score += 5; else warnings.push("بيانات السعر أو وقت الزوج ناقصة");
-  if (age) reasons.push("نافذة التحقق الزمنية مكتملة"); else warnings.push("انتظر 30 دقيقة على الأقل قبل تقييم الدخول");
+  if (age) reasons.push("عملة جديدة ضمن نافذة 0–7 دقائق"); else warnings.push(`العمر خارج نافذة Pro الجديدة (0–${PRO_MAX_AGE_MINUTES} دقائق)`);
   if (!migration) warnings.push("لا يوجد تأكيد migration signature؛ لا دخول آلي من curve");
 
   const gates = { data, venue: venueGate, liquidity, chase, flow, age, migration };

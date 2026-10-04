@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessProToken, classifyProVenue } from "../lib/pro-strategy";
+import { assessProToken, classifyProVenue, PRO_MAX_AGE_MINUTES } from "../lib/pro-strategy";
 
 const base = {
   address: "4vw54BmAogeRV3vPKWyFet5yf8DTLcREzdSzx4rw9Ud9",
@@ -14,7 +14,7 @@ const base = {
   change24hPct: 12,
   buys1h: 120,
   sells1h: 80,
-  pairCreatedAt: new Date(Date.now() - 100 * 3_600_000).toISOString(),
+  pairCreatedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
   venue: "PUMPSWAP" as const,
 };
 
@@ -32,7 +32,14 @@ describe("Pro strategy", () => {
     const result = assessProToken({ ...base, pairCreatedAt: new Date(Date.now() - 10 * 60_000).toISOString() }, 10_000);
     expect(result.decision).toBe("WATCH");
     expect(result.gates.age).toBe(false);
-    expect(result.warnings.some((warning) => warning.includes("30"))).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes(String(PRO_MAX_AGE_MINUTES)))).toBe(true);
+  });
+
+  it("rejects launches older than the Pro new-token window", () => {
+    const result = assessProToken({ ...base, pairCreatedAt: new Date(Date.now() - (PRO_MAX_AGE_MINUTES + 1) * 60_000).toISOString() }, 10_000);
+    expect(result.decision).toBe("WATCH");
+    expect(result.gates.age).toBe(false);
+    expect(result.warnings.some((warning) => warning.includes("0–7"))).toBe(true);
   });
 
   it("rejects a chased move and weak flow", () => {
