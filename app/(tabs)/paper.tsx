@@ -13,7 +13,7 @@ export default function PaperScreen() {
   const market = trpc.market.latest.useQuery(undefined, { staleTime: 5_000, refetchInterval: 15_000 });
   const [account, setAccount] = useState<PaperAccount>(() => createPaperAccount());
   useEffect(() => { void loadPaperAccount().then(setAccount); void loadPreferences().then((prefs) => setDemoMode(prefs.demoMode ?? DEFAULT_PREFERENCES.demoMode ?? true)); }, []);
-  useFocusEffect(() => { let active = true; void loadPaperAccount().then((saved) => { if (active) setAccount(saved); }); return () => { active = false; }; });
+  useFocusEffect(() => { let active = true; void loadPaperAccount().then((saved) => { if (active) setAccount(saved); }); const timer = setInterval(() => { void loadPaperAccount().then((saved) => { if (active) setAccount(saved); }); }, 5_000); return () => { active = false; clearInterval(timer); }; });
   const [selectedAddress, setSelectedAddress] = useState("");
   const [amount, setAmount] = useState("500");
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");

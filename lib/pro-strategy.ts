@@ -33,6 +33,10 @@ export type ProAssessment = {
   firstTrancheUsd: number;
   ageHours: number | null;
   riskReward: number;
+  flowPressure: number;
+  tradeVelocity: number;
+  liquidityEfficiency: number;
+  shortHorizonBias: number;
 };
 
 const MAX_DAILY_MOVE = 25;
@@ -68,6 +72,11 @@ export function assessProToken(token: ProTokenInput, cashUsd = 10_000): ProAsses
   const liquidity = token.liquidityUsd >= liquidityFloor && token.liquidityUsd >= 20 * 100;
   const chase = token.change24hPct <= MAX_DAILY_MOVE && token.change1hPct <= 15;
   const buySellRatio = token.sells1h > 0 ? token.buys1h / token.sells1h : token.buys1h > 0 ? 2 : 0;
+  const totalTrades = token.buys1h + token.sells1h;
+  const flowPressure = clamp(50 + (totalTrades ? ((token.buys1h - token.sells1h) / totalTrades) * 50 : 0), 0, 100);
+  const tradeVelocity = clamp((totalTrades / 50) * 100, 0, 100);
+  const liquidityEfficiency = clamp(token.liquidityUsd > 0 ? (token.volume1hUsd / token.liquidityUsd) * 100 : 0, 0, 100);
+  const shortHorizonBias = clamp(50 + token.change1hPct * 3, 0, 100);
   const flow = buySellRatio >= 1.05 && token.volume1hUsd >= MIN_VOLUME_1H_USD && token.buys1h >= 10;
   const age = ageHours !== null && ageHours >= 0 && ageHours <= PRO_MAX_AGE_MINUTES / 60;
   // DexScreener alone cannot prove a Pump.fun curve completion/migration signature.
@@ -89,6 +98,15 @@ export function assessProToken(token: ProTokenInput, cashUsd = 10_000): ProAsses
   if (buySellRatio >= 1.5) { score += 15; reasons.push("صافي تدفق شراء قوي"); }
   else if (buySellRatio >= 1.05) { score += 9; reasons.push("تدفق شراء موجب"); }
   else warnings.push("تدفق البيع أعلى أو غير مؤكد");
+  if (flowPressure >= 75) { score += 8; reasons.push("ضغط شراء واضح في التدفق"); }
+  else if (flowPressure >= 60) { score += 5; reasons.push("ضغط شراء موجب"); }
+  else warnings.push("ضغط التدفق لا يدعم دخولًا سريعًا");
+  if (tradeVelocity >= 60) { score += 4; reasons.push("سرعة تداول كافية للمراقبة"); }
+  else warnings.push("سرعة التداول منخفضة");
+  if (liquidityEfficiency >= 10 && liquidityEfficiency <= 100) { score += 4; reasons.push("الحجم يتحرك مقابل عمق سيولة قابل للمحاكاة"); }
+  else if (liquidityEfficiency > 100) warnings.push("الحجم أعلى كثيرًا من السيولة؛ خطر انزلاق");
+  if (shortHorizonBias >= 50 && shortHorizonBias <= 80) reasons.push("زخم قصير داخل نطاق قابل للمراقبة");
+  else if (shortHorizonBias > 80) warnings.push("الزخم القصير قد يتحول إلى مطاردة");
   if (token.buys1h >= 25) { score += 10; reasons.push("عدد عمليات شراء كافٍ نسبيًا"); }
   else if (token.buys1h >= 10) score += 5;
   if (token.change1hPct >= 0 && token.change1hPct <= 15) { score += 10; reasons.push("زخم قصير غير مطارد"); }
@@ -112,7 +130,7 @@ export function assessProToken(token: ProTokenInput, cashUsd = 10_000): ProAsses
   const suggestedNotionalUsd = Math.max(25, Math.min(cashUsd * 0.05, maxByLiquidity));
   const firstTrancheUsd = Math.max(10, Math.min(suggestedNotionalUsd * 0.4, cashUsd * MAX_FIRST_TRANCHE_PCT));
 
-  return { score: Math.round(Math.min(100, score)), decision, venue, reasons, warnings, gates, entryPriceUsd, invalidationPriceUsd, targetOnePriceUsd, targetTwoPriceUsd, suggestedNotionalUsd, firstTrancheUsd, ageHours, riskReward: Number(riskReward.toFixed(2)) };
+  return { score: Math.round(Math.min(100, score)), decision, venue, reasons, warnings, gates, entryPriceUsd, invalidationPriceUsd, targetOnePriceUsd, targetTwoPriceUsd, suggestedNotionalUsd, firstTrancheUsd, ageHours, riskReward: Number(riskReward.toFixed(2)), flowPressure: Math.round(flowPressure), tradeVelocity: Math.round(tradeVelocity), liquidityEfficiency: Math.round(liquidityEfficiency), shortHorizonBias: Math.round(shortHorizonBias) };
 }
 
 export function formatAgeHours(ageHours: number | null) {
@@ -120,3 +138,5 @@ export function formatAgeHours(ageHours: number | null) {
   if (ageHours < 24) return `${Math.floor(ageHours)}h`;
   return `${Math.floor(ageHours / 24)}d ${Math.floor(ageHours % 24)}h`;
 }
+
+function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }

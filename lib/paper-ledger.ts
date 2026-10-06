@@ -2,10 +2,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { simulateFill, type SimulatedFill } from "./simulation";
 
 const ACCOUNT_KEY = "memepulse.paper-account.v2";
-export type PaperPosition = { address: string; symbol: string; quantity: number; averagePriceUsd: number; investedUsd: number };
+export type PaperPosition = { address: string; symbol: string; quantity: number; averagePriceUsd: number; investedUsd: number; openedAt?: string };
 export type PaperAccount = { cashUsd: number; positions: PaperPosition[]; realizedPnlUsd: number; trades: PaperTrade[] };
-export type PaperTrade = SimulatedFill & { address: string; symbol: string; quantity: number; timestamp: string };
-export type PaperOrderInput = { side: "BUY" | "SELL"; address: string; symbol: string; priceUsd: number; liquidityUsd: number; notionalUsd: number };
+export type PaperTrade = SimulatedFill & { address: string; symbol: string; quantity: number; timestamp: string; reason?: string };
+export type PaperOrderInput = { side: "BUY" | "SELL"; address: string; symbol: string; priceUsd: number; liquidityUsd: number; notionalUsd: number; reason?: string };
 
 export function createPaperAccount(initialCashUsd = 10_000): PaperAccount { return { cashUsd: initialCashUsd, positions: [], realizedPnlUsd: 0, trades: [] }; }
 export async function loadPaperAccount(): Promise<PaperAccount> { try { const raw = await AsyncStorage.getItem(ACCOUNT_KEY); return raw ? JSON.parse(raw) as PaperAccount : createPaperAccount(); } catch { return createPaperAccount(); } }
@@ -28,13 +28,13 @@ export function executePaperOrder(account: PaperAccount, input: PaperOrderInput)
     const totalCost = requestedUsd + fill.feeUsd;
     next.cashUsd -= totalCost;
     if (nextPosition) { nextPosition.quantity += quantity; nextPosition.investedUsd += totalCost; nextPosition.averagePriceUsd = nextPosition.investedUsd / nextPosition.quantity; }
-    else next.positions.push({ address: input.address, symbol: input.symbol, quantity, averagePriceUsd: fill.estimatedPriceUsd, investedUsd: totalCost });
+    else next.positions.push({ address: input.address, symbol: input.symbol, quantity, averagePriceUsd: fill.estimatedPriceUsd, investedUsd: totalCost, openedAt: new Date().toISOString() });
   } else {
     const soldQuantity = Math.min(quantity, nextPosition?.quantity ?? 0); const proceeds = soldQuantity * fill.estimatedPriceUsd;
     next.cashUsd += proceeds - fill.feeUsd;
     if (nextPosition) { const costBasis = nextPosition.averagePriceUsd * soldQuantity; nextPosition.quantity -= soldQuantity; nextPosition.investedUsd -= costBasis; next.realizedPnlUsd += proceeds - fill.feeUsd - costBasis; }
     next.positions = next.positions.filter((position) => position.quantity > 1e-12);
   }
-  const trade: PaperTrade = { ...fill, address: input.address, symbol: input.symbol, quantity, timestamp: new Date().toISOString() };
+  const trade: PaperTrade = { ...fill, address: input.address, symbol: input.symbol, quantity, timestamp: new Date().toISOString(), reason: input.reason };
   next.trades.push(trade); return { account: next, trade };
 }
